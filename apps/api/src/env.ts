@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 const schema = z.object({
   API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   WEB_ORIGIN: z.url().default('http://localhost:3000'),
@@ -23,16 +24,20 @@ const schema = z.object({
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
+  JWT_SECRET: z.string().min(32),
 });
 export function parseEnv(input: NodeJS.ProcessEnv) {
   const result = schema.safeParse(input);
-  if (!result.success)
-    throw new Error(
-      'Invalid API environment:\n' +
-        result.error.issues
-          .map((i) => i.path.join('.') + ': ' + i.message)
-          .join('\n'),
-    );
+
+  if (!result.success) {
+    const messages = result.error.issues.map((issue) => {
+      return `${issue.path.join('.')}: ${issue.message}`;
+    });
+
+    throw new Error(`Invalid API environment:\n${messages.join('\n')}`);
+  }
+
   return result.data;
 }
+
 export type ApiEnv = ReturnType<typeof parseEnv>;

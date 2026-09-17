@@ -1,23 +1,32 @@
 import Link from 'next/link';
 import { HealthStatus } from '../components/health-status';
+import { LatestMacroObservation } from '../components/latest-macro-observation';
+import { UpcomingEvents } from '../components/upcoming-event';
+import { AuthPanel } from '../components/auth-panel';
+
 const sections = [
   {
     title: 'Watchlist',
+    badge: 'Seeded data',
     description: 'Forex, gold and index instruments will appear here.',
-    sample: 'Sample data Â· EUR/USD Â· XAU/USD Â· S&P 500',
+    sample: 'Sample data: EUR/USD, XAU/USD, S&P 500',
   },
   {
     title: 'Upcoming Events',
+    badge: 'Seeded data',
+
     description: 'A workspace for the macro calendar and event context.',
-    sample: 'Sample data Â· Central bank decision Â· Inflation release',
+    sample: 'Sample data: Central bank decision, inflation release',
   },
   {
     title: 'Daily Brief',
+    badge: 'Placeholder',
+
     description: 'Your daily macro research summary will live here.',
-    sample:
-      'Sample data Â· Brief placeholder. No AI summary has been generated.',
+    sample: 'Sample data: Brief placeholder. No AI summary has been generated.',
   },
 ];
+
 export default function Overview() {
   return (
     <div className="min-h-screen md:flex">
@@ -50,11 +59,11 @@ export default function Overview() {
         </p>
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-6 py-4">
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 px-6 py-4">
           <span className="text-sm text-slate-400">Workspace / Overview</span>
-          <span className="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-400">
-            Sample workspace
-          </span>
+          <div className="w-full sm:w-auto">
+            <AuthPanel />
+          </div>
         </header>
         <main id="main" className="mx-auto max-w-6xl space-y-7 p-6 lg:p-10">
           <div>
@@ -80,14 +89,22 @@ export default function Overview() {
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-lg font-medium">{section.title}</h2>
-                  <span className="text-xs text-slate-500">Placeholder</span>
+                  <span className="text-xs text-slate-500">
+                    {section.badge}
+                  </span>
                 </div>
                 <p className="mt-4 text-sm leading-6 text-slate-400">
                   {section.description}
                 </p>
-                <p className="mt-6 rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-500">
-                  {section.sample}
-                </p>
+                {section.title === 'Watchlist' ? (
+                  <LatestMacroObservation />
+                ) : section.title === 'Upcoming Events' ? (
+                  <UpcomingEvents />
+                ) : (
+                  <p className="mt-6 rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-500 ">
+                    {section.sample}
+                  </p>
+                )}
               </section>
             ))}
           </div>

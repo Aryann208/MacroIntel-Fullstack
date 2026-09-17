@@ -1,69 +1,83 @@
-import { MongoClient } from 'mongodb';
+import mongoose from 'mongoose';
 import { Redis } from 'ioredis';
-import {
-  dependencyHealthSchema,
-  type DependencyHealthResponse,
-} from '@macrointel/contracts';
+import { dependencyHealthSchema } from '@macrointel/contracts';
 import type { ApiEnv } from './env.js';
+
 export function createDependencies(env: ApiEnv) {
-  const timeout = env.DEPENDENCY_TIMEOUT_MS;
-  const mongo = new MongoClient(env.MONGODB_URI, {
-    serverSelectionTimeoutMS: timeout,
-    connectTimeoutMS: timeout,
-    socketTimeoutMS: timeout,
-  });
-  const redis = new Redis(env.REDIS_URL, {
-    lazyConnect: true,
-    enableOfflineQueue: false,
-    connectTimeout: timeout,
-    commandTimeout: timeout,
-    retryStrategy: () => null,
-    maxRetriesPerRequest: 0,
-  });
-  redis.on('error', () => {
-    /* Health response reports failure without exposing credentials. */
-  });
-  let redisConnecting: Promise<void> | undefined;
-  async function checkRedis() {
-    if (redis.status !== 'ready') {
-      redisConnecting ??= redis.connect().finally(() => {
-        redisConnecting = undefined;
-      });
-      await redisConnecting;
-    }
-    return redis.ping();
+  async function connect() {
+    await mongoose.connect(env.MONGODB_URI, {
+      serverSelectionTimeoutMS: env.DEPENDENCY_TIMEOUT_MS,
+    });
   }
-  async function status(check: () => Promise<unknown>): Promise<'up' | 'down'> {
+
+  const redisClient = new Redis(env.REDIS_URL, {
+    lazyConnect: true,
+    connectTimeout: env.DEPENDENCY_TIMEOUT_MS,
+    commandTimeout: env.DEPENDENCY_TIMEOUT_MS,
+    retryStrategy: () => null,
+  });
+
+  // ioredis emits an error event when Redis is unavailable. The health check
+  // below reports that failure in the HTTP response.
+  redisClient.on('error', () => {});
+
+  async function checkMongo() {
     try {
-      await check();
+      const database = mongoose.connection.db;
+      if (!database) return 'down';
+      await database.admin().ping();
       return 'up';
     } catch {
       return 'down';
     }
   }
-  return {
-    async check(): Promise<DependencyHealthResponse> {
-      const [mongodb, redisStatus, qdrant] = await Promise.all([
-        status(() => mongo.db().command({ ping: 1 }, { timeoutMS: timeout })),
-        status(checkRedis),
-        status(async () => {
-          const res = await fetch(new URL('/healthz', env.QDRANT_URL), {
-            signal: AbortSignal.timeout(timeout),
-          });
-          if (!res.ok) throw new Error('Qdrant unavailable');
-        }),
-      ]);
-      return dependencyHealthSchema.parse({
-        status: [mongodb, redisStatus, qdrant].every((v) => v === 'up')
-          ? 'ok'
-          : 'degraded',
-        dependencies: { mongodb, redis: redisStatus, qdrant },
-        timestamp: new Date().toISOString(),
+
+  async function checkRedis() {
+    try {
+      if (redisClient.status === 'wait' || redisClient.status === 'end') {
+        await redisClient.connect();
+      }
+
+      await redisClient.ping();
+      return 'up';
+    } catch {
+      return 'down';
+    }
+  }
+
+  async function checkQdrant() {
+    try {
+      const response = await fetch(`${env.QDRANT_URL}/healthz`, {
+        signal: AbortSignal.timeout(env.DEPENDENCY_TIMEOUT_MS),
       });
-    },
-    async close() {
-      redis.disconnect();
-      await mongo.close();
-    },
-  };
+
+      return response.ok ? 'up' : 'down';
+    } catch {
+      return 'down';
+    }
+  }
+
+  async function check() {
+    const [mongodb, redis, qdrant] = await Promise.all([
+      checkMongo(),
+      checkRedis(),
+      checkQdrant(),
+    ]);
+
+    const allDependenciesAreUp =
+      mongodb === 'up' && redis === 'up' && qdrant === 'up';
+
+    return dependencyHealthSchema.parse({
+      status: allDependenciesAreUp ? 'ok' : 'degraded',
+      dependencies: { mongodb, redis, qdrant },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  async function close() {
+    redisClient.disconnect();
+    await mongoose.disconnect();
+  }
+
+  return { connect, check, close };
 }

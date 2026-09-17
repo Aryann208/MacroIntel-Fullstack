@@ -1,98 +1,71 @@
-import { randomUUID } from 'node:crypto';
+﻿import { randomUUID } from 'node:crypto';
 import { Queue, Worker } from 'bullmq';
 import pino from 'pino';
-import { z } from 'zod';
-const parsed = z
-  .object({
-    REDIS_URL: z
-      .url()
-      .refine(
-        (v) => ['redis:', 'rediss:'].includes(new URL(v).protocol),
-        'Use redis:// or rediss://',
-      )
-      .default('redis://127.0.0.1:6379'),
-    LOG_LEVEL: z
-      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
-      .default('info'),
-  })
-  .safeParse(process.env);
-if (!parsed.success)
-  throw new Error(
-    'Invalid worker environment:\n' +
-      parsed.error.issues
-        .map((i) => i.path.join('.') + ': ' + i.message)
-        .join('\n'),
-  );
-const logger = pino({ level: parsed.data.LOG_LEVEL });
-const url = new URL(parsed.data.REDIS_URL);
+
+const redisUrl = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
+const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' });
+const url = new URL(redisUrl);
+
 const connection = {
   host: url.hostname,
   port: Number(url.port || 6379),
-  username: url.username ? decodeURIComponent(url.username) : undefined,
-  password: url.password ? decodeURIComponent(url.password) : undefined,
-  db: Number(url.pathname.slice(1) || 0),
-  ...(url.protocol === 'rediss:' ? { tls: {} } : {}),
+  username: url.username || undefined,
+  password: url.password || undefined,
 };
+
 const queue = new Queue('system-smoke', { connection });
-const startupId = randomUUID();
 const worker = new Worker(
   'system-smoke',
   async (job) => {
-    if (job.name !== 'startup-smoke') throw new Error('Unsupported job');
     logger.info({ jobId: job.id }, 'Smoke job processed');
-    return { processed: true };
   },
-  { connection, concurrency: 1 },
+  { connection },
 );
+
 worker.on('ready', () => logger.info('Worker ready'));
-worker.on('completed', (job) =>
-  logger.info({ jobId: job.id }, 'Job completed'),
+worker.on('completed', (job) => {
+  logger.info({ jobId: job.id }, 'Job completed');
+});
+worker.on('failed', (job, error) => {
+  logger.error({ jobId: job?.id, error }, 'Job failed');
+});
+worker.on('error', (error) => {
+  logger.error({ error }, 'Worker error');
+});
+queue.on('error', (error) => {
+  logger.error({ error }, 'Queue error');
+});
+
+const jobId = randomUUID();
+await queue.add(
+  'startup-smoke',
+  {},
+  {
+    jobId,
+    attempts: 1,
+    removeOnComplete: true,
+    removeOnFail: true,
+  },
 );
-worker.on('failed', (job, error) =>
-  logger.error({ jobId: job?.id, errorType: error.name }, 'Job failed'),
-);
-worker.on('error', (error) =>
-  logger.error({ errorType: error.name }, 'Worker connection error'),
-);
-queue.on('error', (error) =>
-  logger.error({ errorType: error.name }, 'Queue connection error'),
-);
-let stopping = false;
+logger.info({ jobId }, 'Startup smoke job queued');
+
+let isShuttingDown = false;
+
 async function shutdown(signal: string) {
-  if (stopping) return;
-  stopping = true;
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
   logger.info({ signal }, 'Worker shutting down');
-  const deadline = setTimeout(() => process.exit(1), 10000);
-  deadline.unref();
+
   try {
     await worker.close();
     await queue.close();
-    clearTimeout(deadline);
     logger.info('Worker stopped');
-  } catch {
+  } catch (error) {
+    logger.error({ error }, 'Failed to close worker');
     process.exitCode = 1;
   }
 }
-process.on('SIGINT', () => {
-  void shutdown('SIGINT');
-});
-process.on('SIGTERM', () => {
-  void shutdown('SIGTERM');
-});
-try {
-  await queue.add(
-    'startup-smoke',
-    { startupId },
-    {
-      jobId: startupId,
-      attempts: 1,
-      removeOnComplete: true,
-      removeOnFail: 100,
-    },
-  );
-  logger.info({ jobId: startupId }, 'Startup smoke job queued');
-} catch {
-  logger.error('Smoke enqueue failed');
-  process.exitCode = 1;
-  await shutdown('startup-failure');
-}
+
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));

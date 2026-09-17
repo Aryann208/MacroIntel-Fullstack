@@ -1,4 +1,7 @@
 import { z } from 'zod';
+export * from './macro.js';
+export * from './auth.js';
+
 export const healthSchema = z.object({
   status: z.literal('ok'),
   service: z.literal('macrointel-api'),
@@ -6,6 +9,7 @@ export const healthSchema = z.object({
   timestamp: z.iso.datetime(),
 });
 export type HealthResponse = z.infer<typeof healthSchema>;
+
 export const dependencyHealthSchema = z.object({
   status: z.enum(['ok', 'degraded']),
   dependencies: z.object({

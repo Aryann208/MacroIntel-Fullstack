@@ -66,9 +66,9 @@ Worker logs should show `Worker ready`, `Startup smoke job queued`, `Smoke job p
 
 ## Tests and scope
 
-Tests cover the shared wire contract, actual Express HTTP health response, degraded dependency response, not-found/JSON errors and invalid environment. Dependency HTTP tests inject probes and do not need Docker. Live connectivity and smoke execution are separate runtime checks.
+Tests cover the shared health contract and the two Express health endpoints. Dependency HTTP tests inject a probe and do not need Docker. Live connectivity and smoke execution are separate runtime checks.
 
-Web health-state tests render the presentational component through React server rendering in Vitest, covering loading, success and failure without a DOM emulator. Full browser interaction and responsive visual checks remain manual: load with the API stopped, then start it and select Retry.
+The web health component stays as one readable component. Loading, success, retry and responsive visual behavior are checked manually for now instead of adding a testing abstraction solely for Day 1.
 
 See `docs/architecture.md` for ownership, flow and queue delivery guarantees. Never commit `.env`, dependency directories or build output. This scaffold has no authentication and infrastructure binds only to loopback for local development.
 
