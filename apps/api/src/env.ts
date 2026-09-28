@@ -25,6 +25,12 @@ const schema = z.object({
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
   JWT_SECRET: z.string().min(32),
+  FRED_API_KEY: z
+    .string()
+    .regex(
+      /^[a-z0-9]{32}$/,
+      'FRED API key must contain exactly 32 lowercase letters or digits',
+    ),
 });
 export function parseEnv(input: NodeJS.ProcessEnv) {
   const result = schema.safeParse(input);

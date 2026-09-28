@@ -16,10 +16,11 @@ const economicEvent = new mongoose.Schema(
     category: { type: String, required: true, enum: category },
     importance: {
       type: String,
-      required: true,
       enum: ['low', 'medium', 'high'],
+      default: null,
     },
     scheduledAt: { type: Date, required: true },
+    dateOnly: { type: Boolean, default: false },
     releasedAt: { type: Date, default: null },
     status: {
       type: String,

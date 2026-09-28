@@ -7,9 +7,9 @@
     "node": "^20.19.0 || ^22.13.0 || \u003e=24.0.0"
   },
   "scripts": {
-    "dev": "pnpm --filter @macrointel/contracts build \u0026\u0026 pnpm --parallel --filter @macrointel/web --filter @macrointel/api --filter @macrointel/worker dev",
+    "dev": "pnpm --filter @macrointel/contracts build && pnpm --filter @macrointel/api build && pnpm --parallel --filter @macrointel/web --filter @macrointel/api --filter @macrointel/worker dev",
+    "typecheck": "pnpm --filter @macrointel/contracts build && pnpm --filter @macrointel/api build && pnpm -r typecheck",
     "build": "pnpm -r build",
-    "typecheck": "pnpm --filter @macrointel/contracts build \u0026\u0026 pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
     "test": "pnpm --filter @macrointel/contracts build \u0026\u0026 vitest run",
     "format": "prettier --write .",

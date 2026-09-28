@@ -1,21 +1,23 @@
 import Link from 'next/link';
 import { HealthStatus } from '../components/health-status';
-import { LatestMacroObservation } from '../components/latest-macro-observation';
 import { UpcomingEvents } from '../components/upcoming-event';
 import { AuthPanel } from '../components/auth-panel';
+import { Watchlist } from '../components/watchlist';
+import { LatestMacroObservation } from '../components/latest-macro-observation';
 
 const sections = [
   {
     title: 'Watchlist',
-    badge: 'Seeded data',
+    badge: 'Personal watchlist',
     description: 'Forex, gold and index instruments will appear here.',
     sample: 'Sample data: EUR/USD, XAU/USD, S&P 500',
   },
   {
     title: 'Upcoming Events',
-    badge: 'Seeded data',
+    badge: 'FRED release dates',
 
-    description: 'A workspace for the macro calendar and event context.',
+    description:
+      'Published release dates for the indicators tracked here. Exact release times are not provided.',
     sample: 'Sample data: Central bank decision, inflation release',
   },
   {
@@ -51,6 +53,12 @@ export default function Overview() {
           >
             Overview
           </Link>
+          <Link
+            href="/series"
+            className="mt-2 block rounded-lg px-3 py-2 text-sm text-slate-300 hover:text-teal-300"
+          >
+            Browse indicators
+          </Link>
         </nav>
         <p className="mt-6 text-xs text-slate-500 md:mt-12">
           Day 1 foundation
@@ -72,12 +80,16 @@ export default function Overview() {
             </p>
             <h1 className="mt-2 text-3xl font-semibold">Overview</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-              A focused workspace for forex, gold and index research. All
-              research sections below contain sample data; live providers are
-              not connected.
+              A focused workspace for forex, gold and index research. Macro
+              observations and release dates come from FRED. The daily brief
+              remains a placeholder.
             </p>
           </div>
           <HealthStatus />
+          <section className="rounded-xl border border-slate-800 bg-[#111720] p-5 sm:p-6">
+            <h2 className="text-lg font-medium">Latest Macro Data</h2>
+            <LatestMacroObservation />
+          </section>
           <div className="grid gap-5 lg:grid-cols-2">
             {sections.map((section) => (
               <section
@@ -97,7 +109,7 @@ export default function Overview() {
                   {section.description}
                 </p>
                 {section.title === 'Watchlist' ? (
-                  <LatestMacroObservation />
+                  <Watchlist />
                 ) : section.title === 'Upcoming Events' ? (
                   <UpcomingEvents />
                 ) : (
@@ -109,7 +121,8 @@ export default function Overview() {
             ))}
           </div>
           <p className="text-xs text-slate-500">
-            Infrastructure health is real. Research content is sample data.
+            Macro observations and release dates are sourced from FRED. The
+            daily brief is currently a placeholder.
           </p>
         </main>
       </div>

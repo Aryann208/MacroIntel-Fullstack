@@ -61,15 +61,18 @@ export type LatestMacroObservationResponse = z.infer<
 
 export const upcomingEventSchema = z.object({
   id: z.string(),
+  provider: z.string(),
   name: z.string(),
   country: z.string(),
   currency: z.string(),
   category: macroCategorySchema,
-  importance: z.enum(['low', 'medium', 'high']),
+  importance: z.enum(['low', 'medium', 'high']).nullable(),
   scheduledAt: z.iso.datetime(),
+  dateOnly: z.boolean(),
   forecast: z.number().nullable(),
   previous: z.number().nullable(),
   unit: z.string(),
+  sourceUrl: z.url().nullable(),
 });
 
 export const upcomingEventsResponseSchema = z.object({
@@ -92,12 +95,6 @@ export const macroSeriesListItemSchema = z.object({
 
 export type MacroSeriesListItem = z.infer<typeof macroSeriesListItemSchema>;
 
-export const watchlistResponseSchema = z.object({
-  items: z.array(macroSeriesListItemSchema),
-});
-
-export type WatchlistResponse = z.infer<typeof watchlistResponseSchema>;
-
 export const macroSeriesListResponseSchema = z.object({
   items: z.array(macroSeriesListItemSchema),
   page: z.number().int(),
@@ -107,4 +104,30 @@ export const macroSeriesListResponseSchema = z.object({
 
 export type MacroSeriesListResponse = z.infer<
   typeof macroSeriesListResponseSchema
+>;
+
+export const watchlistObservationSchema = z.object({
+  value: z.number(),
+  observedAt: z.iso.datetime(),
+  vintageAt: z.iso.datetime(),
+});
+
+export const watchlistItemSchema = macroSeriesListItemSchema.extend({
+  latestObservation: watchlistObservationSchema.nullable(),
+});
+
+export const watchlistResponseSchema = z.object({
+  items: z.array(watchlistItemSchema),
+});
+
+export type WatchlistResponse = z.infer<typeof watchlistResponseSchema>;
+
+export const macroSeriesHistoryResponseSchema = z.object({
+  providerSeriesId: z.string(),
+  name: z.string(),
+  unit: z.string(),
+  items: z.array(watchlistObservationSchema),
+});
+export type MacroSeriesHistoryResponse = z.infer<
+  typeof macroSeriesHistoryResponseSchema
 >;

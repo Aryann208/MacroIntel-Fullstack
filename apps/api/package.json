@@ -3,9 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./fred-sync": {
+      "types": "./dist/modules/macro/fred-sync.d.ts",
+      "import": "./dist/modules/macro/fred-sync.js"
+    }
+  },
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/index.ts",
     "build": "tsc -p tsconfig.json",
+    "ingest:fred": "tsx --env-file=../../.env src/scripts/ingest-fred.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "node --env-file=../../.env dist/index.js"
   },

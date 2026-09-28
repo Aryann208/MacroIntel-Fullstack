@@ -11,7 +11,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { requireAuth } from './auth.middleware.js';
 
-export const authRouter = Router();
+export const authRouter: Router = Router();
 
 authRouter.post('/register', async (req, res) => {
   const input = registerRequestSchema.safeParse(req.body);

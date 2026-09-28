@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import express, { type ErrorRequestHandler } from 'express';
+import express, { type ErrorRequestHandler, type Express } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import type { Logger } from 'pino';
@@ -15,7 +15,7 @@ export function createApp(options: {
   origin: string;
   logger: Logger;
   checkDependencies: () => Promise<DependencyHealthResponse>;
-}) {
+}): Express {
   const app = express();
 
   app.use(helmet());
@@ -75,7 +75,7 @@ export function createApp(options: {
       });
       return;
     }
-    options.logger.error({ error, requestId: res.locals.requestId });
+    options.logger.error({ err: error, requestId: res.locals.requestId });
     res.status(500).json({
       error: 'Internal server error',
       requestId: res.locals.requestId,
