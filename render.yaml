@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: macrointel-api
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @macrointel/contracts build && pnpm --filter @macrointel/api build
+    startCommand: node apps/api/dist/index.js
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WEB_ORIGIN
+        fromService:
+          name: macrointel-web
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+
+  - type: web
+    name: macrointel-web
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @macrointel/contracts build && pnpm --filter @macrointel/web build
+    startCommand: cd apps/web && node scripts/next.mjs start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: macrointel-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL

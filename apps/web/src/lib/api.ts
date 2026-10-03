@@ -101,7 +101,10 @@ export async function getCurrentUser(
     },
   });
   if (!response.ok) {
-    throw new Error(`Current user request failed with HTTP ${response.status}`);
+    throw new ApiError(
+      `Current user request failed with HTTP ${response.status}`,
+      response.status,
+    );
   }
 
   const data = await response.json();

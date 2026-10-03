@@ -20,8 +20,9 @@ const app = createApp({
   checkDependencies: dependencies.check,
 });
 
-const server = app.listen(env.API_PORT, () => {
-  logger.info({ port: env.API_PORT }, 'API listening');
+const port = env.PORT ?? env.API_PORT;
+const server = app.listen(port, '0.0.0.0', () => {
+  logger.info({ port }, 'API listening');
 });
 
 server.on('error', (error) => {

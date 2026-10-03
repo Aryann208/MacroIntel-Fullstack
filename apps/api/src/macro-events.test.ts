@@ -6,7 +6,6 @@ import { upcomingEventsResponseSchema } from '@macrointel/contracts';
 const database = vi.hoisted(() => ({
   findEvents: vi.fn(),
   sortEvents: vi.fn(),
-  limitEvents: vi.fn(),
 }));
 
 vi.mock('./modules/macro/models/economic-event.model.js', () => ({
@@ -20,11 +19,11 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-09-28T14:00:00Z'));
   database.findEvents.mockReturnValue({ sort: database.sortEvents });
-  database.sortEvents.mockReturnValue({ limit: database.limitEvents });
-  database.limitEvents.mockResolvedValue([
+  database.sortEvents.mockResolvedValue([
     {
       _id: 'event-id',
       provider: 'fred',
+      providerEventId: 'release-10:2026-09-28',
       name: 'Consumer Price Index',
       country: 'US',
       currency: 'USD',
@@ -51,7 +50,7 @@ describe('upcoming FRED events endpoint', () => {
       logger: pino({ level: 'silent' }),
       checkDependencies: async () => ({
         status: 'ok',
-        dependencies: { mongodb: 'up', redis: 'up', qdrant: 'up' },
+        dependencies: { mongodb: 'up' },
         timestamp: new Date().toISOString(),
       }),
     });

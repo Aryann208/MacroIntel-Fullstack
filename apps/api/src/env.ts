@@ -1,20 +1,17 @@
 import { z } from 'zod';
 
 const schema = z.object({
+  PORT: z.coerce.number().int().min(1).max(65535).optional(),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   WEB_ORIGIN: z.url().default('http://localhost:3000'),
   MONGODB_URI: z
     .string()
-    .startsWith('mongodb://')
-    .default('mongodb://127.0.0.1:27017/macrointel'),
-  REDIS_URL: z
-    .url()
     .refine(
-      (v) => ['redis:', 'rediss:'].includes(new URL(v).protocol),
-      'Use redis:// or rediss://',
+      (value) =>
+        value.startsWith('mongodb://') || value.startsWith('mongodb+srv://'),
+      { error: 'Must be a valid MongoDB connection string' },
     )
-    .default('redis://127.0.0.1:6379'),
-  QDRANT_URL: z.url().default('http://127.0.0.1:6333'),
+    .default('mongodb://127.0.0.1:27017/macrointel'),
   DEPENDENCY_TIMEOUT_MS: z.coerce
     .number()
     .int()
@@ -30,7 +27,8 @@ const schema = z.object({
     .regex(
       /^[a-z0-9]{32}$/,
       'FRED API key must contain exactly 32 lowercase letters or digits',
-    ),
+    )
+    .optional(),
 });
 export function parseEnv(input: NodeJS.ProcessEnv) {
   const result = schema.safeParse(input);

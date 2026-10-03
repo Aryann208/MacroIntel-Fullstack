@@ -1,18 +1,17 @@
 # MacroIntel
 
-Day 1 foundation for a macro research terminal. Research cards are labelled sample data. Only API and infrastructure health are connected.
+MacroIntel is a personal dashboard for monitoring selected US macro indicators. It shows stored FRED observations and history, upcoming release dates, and a signed-in user's watchlist. The Daily Brief is a labelled placeholder. Data changes only when the manual FRED ingestion command runs.
 
 ## Prerequisites
 
-- Node.js 20.19+ on the 20.x line, or Node.js 22.13+ (an actively supported LTS is preferred).
-- pnpm 10.34.1 (`corepack enable` and `corepack prepare pnpm@10.34.1 --activate`, or install that exact pnpm version).
-- Docker Desktop with the Linux container engine running and Docker Compose available.
+- Node.js 20.19+ on the 20.x line, or Node.js 22.13+.
+- pnpm 10.34.1. On Windows PowerShell, use `pnpm.cmd` if `pnpm` is blocked by script execution policy.
+- Docker Desktop and Docker Compose for local MongoDB. A reachable MongoDB instance can be used instead.
+- A FRED API key only when importing real data.
 
-All application dependencies are pinned in manifests; commit the generated pnpm lockfile. No global TypeScript or task runner is needed.
+## Local setup
 
-## Setup
-
-Run from the repository root:
+From the repository root:
 
 ```sh
 pnpm install
@@ -21,55 +20,48 @@ docker compose up -d --wait
 pnpm dev
 ```
 
-PowerShell: replace `cp` with `Copy-Item .env.example .env`. If script execution is disabled, use `pnpm.cmd` for every pnpm command. Do not change your machine execution policy just for this project.
+In PowerShell, use `Copy-Item .env.example .env` instead of `cp` if preferred. The root `.env` is ignored by Git. Replace its example `JWT_SECRET` before any public deployment. `pnpm dev` builds shared contracts, then starts the web and API processes. The frontend reads the API URL at build time; rebuild it after changing `NEXT_PUBLIC_API_URL`.
 
-The root development command first compiles shared contracts, then starts web, API and worker concurrently with plain pnpm. Applications load the root `.env`; Next.js receives public configuration via its Node launcher. Defaults work without secrets. Edit only the root `.env`; every supported variable and Docker port override is documented in `.env.example`.
+To load real indicator values and release dates, put your real 32-character `FRED_API_KEY` in `.env` and run:
+
+```sh
+pnpm --filter @macrointel/api ingest:fred
+```
+
+The command calls FRED and writes to the MongoDB named by `MONGODB_URI`. Run it again whenever you want newer data. For an Atlas database, use its `mongodb+srv://` URI and allow the machine running ingestion to connect. There is no background schedule.
 
 ## Commands
 
-| Command                             | Purpose                                       |
-| ----------------------------------- | --------------------------------------------- |
-| `pnpm dev`                          | Start all three application processes         |
-| `pnpm build`                        | Build contracts before applications           |
-| `pnpm typecheck`                    | Compile contracts and check all workspaces    |
-| `pnpm lint`                         | ESLint, including Next.js rules               |
-| `pnpm test`                         | Vitest contract and Supertest HTTP tests      |
-| `pnpm format` / `pnpm format:check` | Format / verify repository formatting         |
-| `docker compose ps`                 | Inspect service health                        |
-| `docker compose down`               | Stop infrastructure, preserving named volumes |
+| Command               | Purpose                                          |
+| --------------------- | ------------------------------------------------ |
+| `pnpm dev`            | Run web and API locally                          |
+| `pnpm build`          | Build contracts and both applications            |
+| `pnpm typecheck`      | Typecheck the workspace                          |
+| `pnpm lint`           | Run ESLint                                       |
+| `pnpm test`           | Run Vitest tests                                 |
+| `pnpm format:check`   | Check formatting                                 |
+| `docker compose ps`   | Check local MongoDB health                       |
+| `docker compose down` | Stop local MongoDB and preserve its named volume |
 
-Production starts, after `pnpm build`: run `pnpm --filter @macrointel/api start`, `pnpm --filter @macrointel/worker start`, and `pnpm --filter @macrointel/web start` in separate terminals. The web build reads the root `.env`, including `NEXT_PUBLIC_API_URL`; Next.js bundles public variables at build time, so rebuild after changing the public URL.
+After `pnpm build`, `pnpm --filter @macrointel/api start` and `pnpm --filter @macrointel/web start` run the two production processes. Supply runtime variables through the host environment; the web launcher also reads the root `.env` when present locally. See `.env.example` for every variable.
 
-## Ports and verification
+## Local URLs
 
-| URL / port                                       | Expected result                                                                                                                                   |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| http://localhost:3000                            | Responsive Overview, sample cards and API loading/success/failure state                                                                           |
-| http://localhost:4000/api/v1/health              | 200 JSON: `status: "ok"`, `service: "macrointel-api"`, `version: "0.1.0"`, ISO `timestamp`                                                        |
-| http://localhost:4000/api/v1/health/dependencies | 200 `status: "ok"` when all up; otherwise 503 `status: "degraded"`; `dependencies` contains `mongodb`, `redis`, `qdrant`, each `"up"` or `"down"` |
-| MongoDB 127.0.0.1:27017                          | Local database, no development credentials                                                                                                        |
-| Redis 127.0.0.1:6379                             | Persistent BullMQ queue                                                                                                                           |
-| http://localhost:6333/healthz                    | Qdrant health, HTTP 200                                                                                                                           |
-| Qdrant 127.0.0.1:6334                            | gRPC port, unused by applications today                                                                                                           |
+| URL                                              | Expected result                                                                    |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| http://localhost:3000                            | MacroIntel dashboard, series explorer, calendar and watchlist                      |
+| http://localhost:4000/api/v1/health              | 200 with `status`, `service`, `version` and `timestamp`                            |
+| http://localhost:4000/api/v1/health/dependencies | 200 with `dependencies.mongodb: "up"`; 503 with `"down"` if MongoDB is unavailable |
+| 127.0.0.1:27017                                  | Local MongoDB container, bound to loopback                                         |
 
-Worker logs should show `Worker ready`, `Startup smoke job queued`, `Smoke job processed` and `Job completed` for one job ID per normal startup. A watch restart is a new startup and generates a new smoke job. Ctrl+C gracefully stops the applications; infrastructure remains until `docker compose down`.
+The API uses `WEB_ORIGIN` as its allowed browser origin. Set it to the deployed web origin when hosting the API. The frontend's `NEXT_PUBLIC_API_URL` must point to the deployed API before building the web app.
 
 ## Troubleshooting
 
-- Docker pipe/daemon error: start Docker Desktop, wait for the Linux engine, then rerun `docker compose up -d --wait`. Installing the CLI alone is insufficient.
-- Port already allocated: stop the conflicting service or change the documented Docker port variables and matching connection URLs. Web development uses port 3000 and CORS defaults to that origin.
-- API unavailable: inspect the API terminal and `.env`, visit its health URL directly, then click Retry. CORS allows only `WEB_ORIGIN`; alternate browser origins need an explicit override.
-- Degraded dependencies: inspect `docker compose ps` and service logs. API liveness does not imply infrastructure readiness. Dependency errors expose status only, never connection credentials.
-- Redis unavailable: the worker logs connection errors and waits for Redis recovery. Start infrastructure before applications.
-- Workspace import missing: run `pnpm install` and `pnpm --filter @macrointel/contracts build`. Restart development after editing shared schemas so their compiled exports update.
-- Windows `EPERM` on Node resolving the user directory: run commands in a terminal with filesystem access to your project; this is an execution environment permission issue, not a successful check.
+- MongoDB connection failure: check `docker compose ps` and `MONGODB_URI`. The API exits if it cannot connect at startup.
+- Empty macro data: run `ingest:fred` with a real FRED key, then refresh the page. Without a sync, the database has no live FRED observations.
+- Browser cannot reach the API: open `/api/v1/health` directly and compare `NEXT_PUBLIC_API_URL` with the API origin. Check `WEB_ORIGIN` if the browser reports a CORS error.
+- Missing shared contract export: run `pnpm --filter @macrointel/contracts build` and restart development.
+- Windows `EPERM` from Node: rerun the command in a terminal with filesystem access to your user directory; this is a local permission error.
 
-## Tests and scope
-
-Tests cover the shared health contract and the two Express health endpoints. Dependency HTTP tests inject a probe and do not need Docker. Live connectivity and smoke execution are separate runtime checks.
-
-The web health component stays as one readable component. Loading, success, retry and responsive visual behavior are checked manually for now instead of adding a testing abstraction solely for Day 1.
-
-See `docs/architecture.md` for ownership, flow and queue delivery guarantees. Never commit `.env`, dependency directories or build output. This scaffold has no authentication and infrastructure binds only to loopback for local development.
-
-Tooling compatibility: ESLint 9.39.5 is pinned because the current Next.js React/accessibility/import plugins declare support through ESLint 9. npm marks this ESLint line deprecated; upgrade it together with compatible Next.js plugins. Vitest 4 is used because Vitest 5 requires newer Node. Optional native acceleration build scripts for msgpackr-extract and unrs-resolver remain disabled; pure JavaScript/prebuilt fallbacks are sufficient for the verified checks.
+See [docs/architecture.md](docs/architecture.md) for ownership and data flow, and [docs/deployment.md](docs/deployment.md) for the free Atlas and Render deployment steps. Never commit `.env`, credentials, dependency directories or build output.

@@ -7,7 +7,7 @@
     "dev": "node scripts/next.mjs dev --port 3000",
     "build": "node scripts/next.mjs build",
     "typecheck": "next typegen \u0026\u0026 tsc --noEmit",
-    "start": "node scripts/next.mjs start --port 3000"
+    "start": "node scripts/next.mjs start"
   },
   "dependencies": {
     "@macrointel/contracts": "workspace:*",

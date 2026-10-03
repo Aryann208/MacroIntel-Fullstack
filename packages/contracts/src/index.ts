@@ -14,8 +14,6 @@ export const dependencyHealthSchema = z.object({
   status: z.enum(['ok', 'degraded']),
   dependencies: z.object({
     mongodb: z.enum(['up', 'down']),
-    redis: z.enum(['up', 'down']),
-    qdrant: z.enum(['up', 'down']),
   }),
   timestamp: z.iso.datetime(),
 });

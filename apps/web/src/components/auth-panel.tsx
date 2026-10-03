@@ -11,7 +11,14 @@ export function AuthPanel() {
   const [toggleRegister, setToggleRegister] = useState<boolean>(false);
   const [password, setPassword] = useState('');
 
-  const { user, isCheckingSession, signIn, signOut } = useAuth();
+  const {
+    user,
+    isCheckingSession,
+    signIn,
+    signOut,
+    restoreError,
+    retrySession,
+  } = useAuth();
 
   const registerMutation = useMutation({
     mutationFn: async () => {
@@ -22,6 +29,7 @@ export function AuthPanel() {
       setToggleRegister(false);
     },
   });
+
   const loginMutation = useMutation({
     mutationFn: async () => {
       await signIn({ email, password });
@@ -54,6 +62,24 @@ export function AuthPanel() {
           aria-hidden="true"
         />
         <span className="max-w-64 truncate">Checking...</span>
+      </div>
+    );
+  }
+
+  if (restoreError) {
+    return (
+      <div
+        className="flex items-center gap-3 text-sm text-amber-200"
+        role="alert"
+      >
+        <span>Couldn{`'`}t verify your session.</span>
+        <button
+          type="button"
+          onClick={retrySession}
+          className="rounded-lg border border-amber-700 px-3 py-2 font-medium hover:bg-amber-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+        >
+          Retry
+        </button>
       </div>
     );
   }

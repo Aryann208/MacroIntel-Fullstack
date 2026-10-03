@@ -9,7 +9,7 @@ const app = createApp({
   logger: pino({ level: 'silent' }),
   checkDependencies: async () => ({
     status: 'degraded',
-    dependencies: { mongodb: 'down', redis: 'up', qdrant: 'down' },
+    dependencies: { mongodb: 'down' },
     timestamp: new Date().toISOString(),
   }),
 });
@@ -21,15 +21,11 @@ describe('health endpoints', () => {
     expect(healthSchema.safeParse(response.body).success).toBe(true);
   });
 
-  it('reports each dependency', async () => {
+  it('reports MongoDB as down', async () => {
     const response = await request(app)
       .get('/api/v1/health/dependencies')
       .expect(503);
 
-    expect(response.body.dependencies).toEqual({
-      mongodb: 'down',
-      redis: 'up',
-      qdrant: 'down',
-    });
+    expect(response.body.dependencies).toEqual({ mongodb: 'down' });
   });
 });

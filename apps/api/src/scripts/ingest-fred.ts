@@ -4,6 +4,10 @@ import { syncFred } from '../modules/macro/fred-sync.js';
 
 const env = parseEnv(process.env);
 
+if (!env.FRED_API_KEY) {
+  throw new Error('FRED_API_KEY is required to ingest FRED data');
+}
+
 try {
   await mongoose.connect(env.MONGODB_URI);
 
