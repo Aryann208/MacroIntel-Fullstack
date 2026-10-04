@@ -3,7 +3,8 @@ import './globals.css';
 import { Providers } from '../components/providers';
 export const metadata: Metadata = {
   title: 'MacroIntel | Overview',
-  description: 'Macro research workspace foundation',
+  description:
+    'Track US economic indicators, release dates, and your watchlist.',
 };
 export default function RootLayout({
   children,

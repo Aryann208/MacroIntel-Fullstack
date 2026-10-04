@@ -1,6 +1,6 @@
 # MacroIntel
 
-MacroIntel is a personal dashboard for monitoring selected US macro indicators. It shows stored FRED observations and history, upcoming release dates, and a signed-in user's watchlist. The Daily Brief is a labelled placeholder. Data changes only when the manual FRED ingestion command runs.
+MacroIntel is a personal dashboard for monitoring selected US macro indicators. It shows stored FRED observations and history, upcoming release dates, and a signed-in user's watchlist. Data changes only when the manual FRED ingestion command runs. AI summaries are not implemented.
 
 ## Prerequisites
 

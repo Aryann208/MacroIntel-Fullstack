@@ -1,6 +1,5 @@
 import {
   currentUserResponseSchema,
-  healthSchema,
   latestMacroObservationResponseSchema,
   loginResponseSchema,
   macroSeriesListResponseSchema,
@@ -11,7 +10,6 @@ import {
   type LoginResponse,
   type MacroSeriesListResponse,
   type UpcomingEventsResponse,
-  type HealthResponse,
   type LatestMacroObservationResponse,
   type WatchlistResponse,
   macroSeriesHistoryResponseSchema,
@@ -29,17 +27,6 @@ export class ApiError extends Error {
   }
 }
 const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
-export async function getHealth(): Promise<HealthResponse> {
-  const response = await fetch(`${baseUrl}/api/v1/health`);
-
-  if (!response.ok) {
-    throw new Error(`API returned HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  return healthSchema.parse(data);
-}
 
 export async function getLatestMacroObservation(
   providerSeriesId: string,
@@ -174,8 +161,6 @@ export async function getMacroSeriesHistory(
   providerSeriesId: string,
   limit?: number,
 ): Promise<MacroSeriesHistoryResponse> {
-  console.log('limit', limit);
-
   const response = await fetch(
     `${baseUrl}/api/v1/macro/series/${encodeURIComponent(providerSeriesId)}/history?limit=${limit || 12}`,
   );
