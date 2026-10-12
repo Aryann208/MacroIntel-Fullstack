@@ -10,6 +10,7 @@ import {
 import { macroRouter } from './modules/macro/macro.route.js';
 import { authRouter } from './modules/auth/auth.route.js';
 import { watchlistRouter } from './modules/watchlist/watchlist.route.js';
+import { integrationsRouter } from './modules/integrations/integrations.route.js';
 
 export function createApp(options: {
   origin: string;
@@ -60,6 +61,7 @@ export function createApp(options: {
   app.use('/api/v1/auth', authRouter);
   app.use('/api/v1/macro', macroRouter);
   app.use('/api/v1/watchlist', watchlistRouter);
+  app.use('/api/v1/integrations', integrationsRouter);
   app.use((_req, res) => {
     res.status(404).json({
       error: 'Not found',

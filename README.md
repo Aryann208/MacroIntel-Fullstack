@@ -1,6 +1,6 @@
 # MacroIntel
 
-MacroIntel is a personal dashboard for monitoring selected US macro indicators. It shows stored FRED observations and history, upcoming release dates, and a signed-in user's watchlist. Data changes only when the manual FRED ingestion command runs. AI summaries are not implemented.
+MacroIntel is a personal dashboard for monitoring selected US macro indicators. It shows stored FRED observations and history, upcoming release dates, and a signed-in user's watchlist. Signed-in users can also see the newest imported change for each watched indicator and explicitly mark those changes as seen. Data changes only when the manual FRED ingestion command runs. AI summaries are not implemented.
 
 ## Prerequisites
 
@@ -60,8 +60,11 @@ The API uses `WEB_ORIGIN` as its allowed browser origin. Set it to the deployed 
 
 - MongoDB connection failure: check `docker compose ps` and `MONGODB_URI`. The API exits if it cannot connect at startup.
 - Empty macro data: run `ingest:fred` with a real FRED key, then refresh the page. Without a sync, the database has no live FRED observations.
+- Empty watchlist changes: the first visit establishes a baseline, so older imports are not shown as unread. Run a later FRED import with a changed observation, then refresh or return to the page. Opening the page does not mark changes seen; use **Mark all as seen**.
 - Browser cannot reach the API: open `/api/v1/health` directly and compare `NEXT_PUBLIC_API_URL` with the API origin. Check `WEB_ORIGIN` if the browser reports a CORS error.
 - Missing shared contract export: run `pnpm --filter @macrointel/contracts build` and restart development.
 - Windows `EPERM` from Node: rerun the command in a terminal with filesystem access to your user directory; this is a local permission error.
 
-See [docs/architecture.md](docs/architecture.md) for ownership and data flow, and [docs/deployment.md](docs/deployment.md) for the free Atlas and Render deployment steps. Never commit `.env`, credentials, dependency directories or build output.
+See [docs/architecture.md](docs/architecture.md) for ownership and data flow, [docs/hld-roadmap.md](docs/hld-roadmap.md) for the next ingestion and caching learning track, and [docs/deployment.md](docs/deployment.md) for the free Atlas and Render deployment steps. Never commit `.env`, credentials, dependency directories or build output.
+
+The first local MT5 connector probe is documented in [connectors/mt5/README.md](connectors/mt5/README.md). It reads one explicitly selected demo terminal and does not synchronize data to the API.

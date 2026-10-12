@@ -122,6 +122,29 @@ export const watchlistResponseSchema = z.object({
 
 export type WatchlistResponse = z.infer<typeof watchlistResponseSchema>;
 
+export const watchlistChangeSchema = z.object({
+  providerSeriesId: z.string(),
+  name: z.string(),
+  unit: z.string(),
+  value: z.number(),
+  observedAt: z.iso.datetime(),
+  ingestedAt: z.iso.datetime(),
+});
+
+export const watchlistChangesResponseSchema = z.object({
+  items: z.array(watchlistChangeSchema),
+  asOf: z.iso.datetime(),
+  needsBaseline: z.boolean(),
+});
+
+export type WatchlistChangesResponse = z.infer<
+  typeof watchlistChangesResponseSchema
+>;
+
+export const acknowledgeWatchlistChangesSchema = z.object({
+  asOf: z.iso.datetime(),
+});
+
 export const macroSeriesHistoryResponseSchema = z.object({
   providerSeriesId: z.string(),
   name: z.string(),

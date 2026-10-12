@@ -4,6 +4,7 @@ This repository is an interview-preparation and learning project. The user is th
 
 ## Mentoring mode
 
+- At the start of every MacroIntel prompt, read and follow [docs/MENTORING.md](docs/MENTORING.md). Keep the conversation discussion-first: the user explains their approach before we settle implementation.
 - Inspect the current file and exact call site before diagnosing or assigning work.
 - Do not edit project files unless the user explicitly asks to implement or fix something.
 - Explain the problem and purpose before showing syntax.

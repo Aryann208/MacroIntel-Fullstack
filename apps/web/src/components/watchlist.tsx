@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useMacroSeriesQuery } from '../lib/use-macro-series-query';
 import { useWatchlist } from '../lib/use-watchlist';
+import { useWatchlistChanges } from '../lib/use-watchlist-changes';
 import { useAuth } from './auth-provider';
 import Link from 'next/link';
 
@@ -34,6 +35,8 @@ export function Watchlist() {
 
 export function AuthenticatedWatchlist({ token }: AuthenticatedWatchlistProps) {
   const { watchlistQuery, addMutation, removeMutation } = useWatchlist(token);
+  const { changesQuery, startMutation, markSeenMutation } =
+    useWatchlistChanges(token);
   const macroSeries = useMacroSeriesQuery();
   const [providerSeriesId, setProviderSeriesId] = useState('');
 
@@ -134,6 +137,92 @@ export function AuthenticatedWatchlist({ token }: AuthenticatedWatchlistProps) {
         </p>
       )}
 
+      <section
+        aria-label="Changes since you last looked"
+        className="rounded-lg border border-slate-700 bg-slate-900/40 p-4"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-sm font-medium text-slate-200">
+            Changes since you last looked
+          </h3>
+          {changesQuery.data &&
+            !changesQuery.data.needsBaseline &&
+            changesQuery.data.items.length > 0 && (
+              <button
+                type="button"
+                onClick={() => markSeenMutation.mutate(changesQuery.data.asOf)}
+                disabled={markSeenMutation.isPending}
+                className="rounded-lg border border-teal-700 px-3 py-1.5 text-xs font-medium text-teal-200 hover:bg-teal-950/50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {markSeenMutation.isPending ? 'Marking...' : 'Mark all as seen'}
+              </button>
+            )}
+        </div>
+
+        {changesQuery.isPending && (
+          <p className="mt-3 text-sm text-slate-400" role="status">
+            Checking for changes...
+          </p>
+        )}
+        {changesQuery.isError && (
+          <p className="mt-3 text-sm text-amber-300" role="alert">
+            Could not load changes. Please try again.
+          </p>
+        )}
+        {changesQuery.data?.needsBaseline && (
+          <p className="mt-3 text-sm text-slate-400" role="status">
+            Starting change tracking. New updates will appear here.
+          </p>
+        )}
+        {startMutation.isError && changesQuery.data?.needsBaseline && (
+          <button
+            type="button"
+            onClick={() => startMutation.mutate(changesQuery.data.asOf)}
+            className="mt-2 text-sm text-amber-300 underline underline-offset-4"
+          >
+            Try starting change tracking again
+          </button>
+        )}
+        {changesQuery.data &&
+          !changesQuery.data.needsBaseline &&
+          changesQuery.data.items.length === 0 && (
+            <p className="mt-3 text-sm text-slate-400">
+              No new changes in your watchlist.
+            </p>
+          )}
+        {changesQuery.data &&
+          !changesQuery.data.needsBaseline &&
+          changesQuery.data.items.length > 0 && (
+            <ul className="mt-3 space-y-2">
+              {changesQuery.data.items.map((change) => (
+                <li
+                  key={change.providerSeriesId}
+                  className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-3 text-sm"
+                >
+                  <p className="font-medium text-slate-100">{change.name}</p>
+                  <p className="mt-1 text-slate-300">
+                    {change.value} {change.unit} for the period{' '}
+                    {new Date(change.observedAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      timeZone: 'UTC',
+                    })}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Imported {new Date(change.ingestedAt).toLocaleString()}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        {markSeenMutation.isError && (
+          <p className="mt-3 text-sm text-amber-300" role="alert">
+            Could not mark changes as seen. Please try again.
+          </p>
+        )}
+      </section>
+
       <div>
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="text-sm font-medium text-slate-200">
@@ -150,21 +239,31 @@ export function AuthenticatedWatchlist({ token }: AuthenticatedWatchlistProps) {
               const isRemoving =
                 removeMutation.isPending &&
                 removeMutation.variables === item.providerSeriesId;
+              const hasUnreadChange =
+                changesQuery.data?.items.some(
+                  (change) => change.providerSeriesId === item.providerSeriesId,
+                ) ?? false;
 
               return (
                 <li
-                  className="flex flex-col gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  className={`flex flex-col gap-3 rounded-lg border ${hasUnreadChange ? 'border-amber-700' : 'border-slate-700'} bg-slate-900/60 p-3 sm:flex-row sm:items-center sm:justify-between`}
                   key={item.providerSeriesId}
                 >
                   <div className="min-w-0">
-                    <p className=" flex flex-col gap-2 truncate text-sm font-medium text-slate-100">
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
                       <Link
                         href={`/series/${encodeURIComponent(item.providerSeriesId)}`}
-                        className="hover:text-teal-300 hover:underline"
+                        className="text-slate-100 hover:text-teal-300 hover:underline"
                       >
-                        {' '}
                         {item.name}
                       </Link>
+                      {hasUnreadChange && (
+                        <span className="rounded-full border border-amber-700 bg-amber-950/40 px-2 py-0.5 text-xs text-amber-300">
+                          Updated
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2 flex flex-col gap-1 text-sm text-slate-300">
                       {item.latestObservation ? (
                         <>
                           <span>Value: {item.latestObservation?.value}</span>
@@ -183,7 +282,8 @@ export function AuthenticatedWatchlist({ token }: AuthenticatedWatchlistProps) {
                       ) : (
                         <span>No observation available</span>
                       )}
-                    </p>
+                    </div>
+
                     <p className="mt-1 text-xs text-slate-500">
                       {item.shortName} · {item.country} · {item.category}
                     </p>

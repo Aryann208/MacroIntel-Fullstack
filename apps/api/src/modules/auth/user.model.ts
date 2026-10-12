@@ -11,6 +11,7 @@ export const userSchema = new mongoose.Schema(
     },
     passwordHash: { type: String, required: true, select: false },
     watchlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MacroSeries' }],
+    lastSeenChangesAt: { type: Date },
   },
   { timestamps: true },
 );

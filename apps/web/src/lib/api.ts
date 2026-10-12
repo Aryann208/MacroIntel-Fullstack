@@ -5,6 +5,7 @@ import {
   macroSeriesListResponseSchema,
   upcomingEventsResponseSchema,
   watchlistResponseSchema,
+  watchlistChangesResponseSchema,
   type CurrentUserResponse,
   type LoginRequest,
   type LoginResponse,
@@ -12,11 +13,15 @@ import {
   type UpcomingEventsResponse,
   type LatestMacroObservationResponse,
   type WatchlistResponse,
+  type WatchlistChangesResponse,
   macroSeriesHistoryResponseSchema,
   MacroSeriesHistoryResponse,
   RegisterResponse,
   RegisterRequest,
   registerResponseSchema,
+  sharedSnapshotResponseSchema,
+  historicalPositionsResponseSchema,
+  type HistoricalPositions,
 } from '@macrointel/contracts';
 
 export class ApiError extends Error {
@@ -114,6 +119,60 @@ export async function getWatchlist(token: string): Promise<WatchlistResponse> {
   return watchlistResponseSchema.parse(data);
 }
 
+export async function getWatchlistChanges(
+  token: string,
+): Promise<WatchlistChangesResponse> {
+  const response = await fetch(`${baseUrl}/api/v1/watchlist/changes`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new ApiError(
+      `Watchlist changes fetch failed with HTTP ${response.status}`,
+      response.status,
+    );
+  }
+
+  const data = await response.json();
+  return watchlistChangesResponseSchema.parse(data);
+}
+
+export async function startWatchlistChanges(asOf: string, token: string) {
+  const response = await fetch(`${baseUrl}/api/v1/watchlist/changes/start`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ asOf }),
+  });
+
+  if (!response.ok) {
+    throw new ApiError(
+      `Starting change tracking failed with HTTP ${response.status}`,
+      response.status,
+    );
+  }
+}
+
+export async function markWatchlistChangesSeen(asOf: string, token: string) {
+  const response = await fetch(`${baseUrl}/api/v1/watchlist/changes/seen`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ asOf }),
+  });
+
+  if (!response.ok) {
+    throw new ApiError(
+      `Marking changes seen failed with HTTP ${response.status}`,
+      response.status,
+    );
+  }
+}
+
 export async function addToWatchlist(
   providerSeriesId: string,
   token: string,
@@ -206,5 +265,36 @@ export async function getCalendarEvents(from: string, to: string) {
   }
   const data = await response.json();
   const validatedData = upcomingEventsResponseSchema.parse(data);
+  return validatedData;
+}
+
+export async function getLatestSnapshot() {
+  const response = await fetch(`${baseUrl}/api/v1/integrations/mt5/snapshot`);
+  if (!response.ok) {
+    throw new Error(
+      `Error fetching latest MT5 snapshot with HTTP ${response.status}`,
+    );
+  }
+  const data = await response.json();
+  const validatedData = sharedSnapshotResponseSchema.parse(data);
+  return validatedData;
+}
+
+export async function getHistoricalPositions(
+  login: string,
+  server: string,
+): Promise<HistoricalPositions> {
+  const query = new URLSearchParams({ login, server });
+  const response = await fetch(
+    `${baseUrl}/api/v1/integrations/mt5/getHistory?${query}`,
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Error fetching historical positions with HTTP ${response.status}`,
+    );
+  }
+  const data = await response.json();
+  const validatedData = historicalPositionsResponseSchema.parse(data);
   return validatedData;
 }

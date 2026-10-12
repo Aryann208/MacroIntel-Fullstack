@@ -1,6 +1,7 @@
 import { z } from 'zod';
 export * from './macro.js';
 export * from './auth.js';
+export * from './trading.js';
 
 export const healthSchema = z.object({
   status: z.literal('ok'),

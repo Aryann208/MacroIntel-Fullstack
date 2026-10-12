@@ -8,5 +8,7 @@ dist/
 coverage/
 *.tsbuildinfo
 *.log
+__pycache__/
+*.py[cod]
 next-env.d.ts
 source-material
