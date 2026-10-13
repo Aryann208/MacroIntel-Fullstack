@@ -23,6 +23,7 @@ import {
   historicalPositionsResponseSchema,
   type HistoricalPositions,
 } from '@macrointel/contracts';
+import { localMidnightAsIso, midnightAfterDateAsISO } from '../utils/helper';
 
 export class ApiError extends Error {
   status: number;
@@ -283,8 +284,36 @@ export async function getLatestSnapshot() {
 export async function getHistoricalPositions(
   login: string,
   server: string,
+  fromDate?: string,
+  toDate?: string,
+  magicNumber?: string,
+  direction?: string,
+  outcome?: string,
+  symbol?: string,
+  cursor?: string | null,
 ): Promise<HistoricalPositions> {
   const query = new URLSearchParams({ login, server });
+
+  if (fromDate && toDate) {
+    query.set('from', localMidnightAsIso(fromDate));
+    query.set('to', midnightAfterDateAsISO(toDate));
+  }
+  if (direction) {
+    query.set('direction', direction);
+  }
+  if (magicNumber) {
+    query.set('magicNumber', magicNumber);
+  }
+  if (outcome) {
+    query.set('outcome', outcome);
+  }
+  if (symbol) {
+    query.set('symbol', symbol);
+  }
+  if (cursor) {
+    query.set('cursor', cursor);
+  }
+
   const response = await fetch(
     `${baseUrl}/api/v1/integrations/mt5/getHistory?${query}`,
   );

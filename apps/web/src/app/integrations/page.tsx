@@ -1,4 +1,6 @@
 'use client';
+import { useState } from 'react';
+import { HistoryPerformanceCharts } from '../../components/history-performance-charts';
 import { useFetchHistoricalPositions } from '../../components/use-fetch-historical-positions';
 import { useFetchMT5Snapshot } from '../../components/use-fetch-mt5-snapshot-provider';
 
@@ -6,8 +8,39 @@ export default function IntegrationsPage() {
   const snapshotQuery = useFetchMT5Snapshot();
   const login = snapshotQuery.data?.account.login;
   const server = snapshotQuery.data?.account.server;
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [symbol, setSymbol] = useState('');
+  const [magicNumber, setMagicNumber] = useState('');
+  const [direction, setDirection] = useState('');
+  const [outcome, setOutcome] = useState('');
+  const [appliedFilters, setAppliedFilters] = useState({
+    fromDate: '',
+    toDate: '',
+    symbol: '',
+    magicNumber: '',
+    direction: '',
+    outcome: '',
+  });
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([]);
 
-  const historicalPositionsQuery = useFetchHistoricalPositions(login, server);
+  const hasDateRange = Boolean(
+    appliedFilters.fromDate && appliedFilters.toDate,
+  );
+  const hasPartialDateRange = Boolean(fromDate) !== Boolean(toDate);
+
+  const historicalPositionsQuery = useFetchHistoricalPositions(
+    login,
+    server,
+    hasDateRange ? appliedFilters.fromDate : undefined,
+    hasDateRange ? appliedFilters.toDate : undefined,
+    appliedFilters.magicNumber || undefined,
+    appliedFilters.direction || undefined,
+    appliedFilters.outcome || undefined,
+    appliedFilters.symbol || undefined,
+    cursor,
+  );
   const snapshotStatus = snapshotQuery.isPending
     ? 'Loading'
     : snapshotQuery.isError
@@ -23,52 +56,80 @@ export default function IntegrationsPage() {
     : snapshotQuery.isError
       ? 'bg-red-400'
       : 'bg-emerald-300';
-  const toCamelCase = (word: string) => {
-    if (word.length === 0) return word;
-    const firstChar = word.slice(0, 1);
-    const restChars = word.slice(1, word.length);
-    return firstChar.toUpperCase() + restChars;
+  const formatMetricLabel = (key: string) => {
+    const words = key.replace(/([a-z])([A-Z])/g, '$1 $2');
+    return words.charAt(0).toUpperCase() + words.slice(1);
   };
   const accountMetrics = Object.entries(snapshotQuery.data?.account ?? {}).map(
     ([key, value]) => ({
-      label: toCamelCase(key),
+      label: formatMetricLabel(key),
       value: value,
     }),
   );
   const positions = snapshotQuery.data?.positions;
   const history = historicalPositionsQuery.data;
+  const metrics = history?.metrics;
+  const currency = snapshotQuery.data?.account.currency ?? 'USD';
   const formatNumber = (value: number) =>
     value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 2,
+    }).format(value);
+
+  const goToNextHistoryPage = () => {
+    if (!history?.nextCursor) return;
+
+    setCursorHistory((previousCursors) => [...previousCursors, cursor]);
+    setCursor(history.nextCursor);
+  };
+
+  const goToPreviousHistoryPage = () => {
+    if (cursorHistory.length === 0) return;
+
+    const previousCursor = cursorHistory[cursorHistory.length - 1] ?? null;
+    setCursorHistory((previousCursors) => previousCursors.slice(0, -1));
+    setCursor(previousCursor);
+  };
 
   return (
-    <main className="mx-auto max-w-6xl space-y-7 p-6 lg:p-10">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <main className="mx-auto max-w-7xl space-y-8 p-5 sm:p-7 lg:p-10">
+      <div className="flex flex-wrap items-center justify-between gap-5">
         <div>
-          <p className="text-xs tracking-widest text-teal-300 uppercase">
+          <p className="text-xs font-semibold tracking-[0.18em] text-teal-300 uppercase">
             Connections
           </p>
-          <h1 className="mt-2 text-3xl font-semibold">Integrations</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-            View account activity from your connected trading platform.
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+            Integrations
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+            Monitor your connected MetaTrader account and review completed
+            trades.
           </p>
         </div>
         <span
-          className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium ${statusColor}`}
+          className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-medium shadow-sm ${statusColor}`}
         >
-          <span className={`h-2 w-2 rounded-full ${statusDotColor}`} />
+          <span
+            className={`h-2 w-2 rounded-full ${statusDotColor} ${snapshotStatus === 'Live' ? 'animate-pulse' : ''}`}
+          />
           {snapshotStatus}
         </span>
       </div>
 
-      <section className="rounded-xl border border-slate-800 bg-[#111720] p-5 sm:p-6">
+      <section className="rounded-2xl border border-slate-800/90 bg-linear-to-br from-[#141c27] to-[#10151d] p-5 shadow-xl shadow-black/10 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs tracking-widest text-slate-500 uppercase">
+            <p className="text-xs font-medium tracking-[0.16em] text-slate-500 uppercase">
               Connected account
             </p>
-            <h2 className="mt-2 text-xl font-semibold">MetaTrader 5</h2>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">
+              MetaTrader 5
+            </h2>
             <p className="mt-1 text-sm text-slate-400">
-              MT5 server <span className="px-1 text-slate-600">·</span>{' '}
+              MT5 server <span className="px-1 text-slate-600">/</span>{' '}
               {snapshotQuery.isPending ? (
                 <span
                   aria-label="Loading server"
@@ -79,20 +140,15 @@ export default function IntegrationsPage() {
               )}
             </p>
           </div>
-          <span
-            className={`rounded-md border px-2.5 py-1 text-xs ${statusColor}`}
-          >
-            {snapshotStatus}
-          </span>
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {snapshotQuery.isPending
             ? Array.from({ length: 8 }, (_, index) => (
                 <div
                   key={`account-skeleton-${index}`}
                   aria-hidden="true"
-                  className="rounded-lg border border-slate-800 bg-slate-950/50 p-4"
+                  className="rounded-xl border border-slate-800/80 bg-slate-950/45 p-4 transition-colors hover:border-slate-700"
                 >
                   <div className="h-4 w-24 animate-pulse rounded bg-slate-700" />
                   <div className="mt-3 h-6 w-32 animate-pulse rounded bg-slate-800" />
@@ -101,21 +157,115 @@ export default function IntegrationsPage() {
             : accountMetrics.map((metric) => (
                 <div
                   key={metric.label}
-                  className="rounded-lg border border-slate-800 bg-slate-950/50 p-4"
+                  className="rounded-xl border border-slate-800/80 bg-slate-950/45 p-4 transition-colors hover:border-slate-700"
                 >
                   <p className="text-sm text-slate-400">{metric.label}</p>
-                  <p className="mt-2 text-xl font-medium tabular-nums text-slate-100">
-                    {metric.value}
+                  <p
+                    className="mt-2 truncate text-xl font-medium tabular-nums text-slate-100"
+                    title={String(metric.value)}
+                  >
+                    {typeof metric.value === 'number'
+                      ? formatNumber(metric.value)
+                      : metric.value}
                   </p>
                 </div>
               ))}
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-slate-800 bg-[#111720]">
+      <section className="space-y-4 rounded-2xl border border-slate-800/90 bg-[#111720] p-5 shadow-lg shadow-black/10 sm:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.16em] text-teal-300 uppercase">
+              Performance
+            </p>
+            <h2 className="mt-1 text-lg font-semibold tracking-tight">
+              Account metrics
+            </h2>
+            <p className="mt-1 text-sm text-slate-400">
+              {metrics
+                ? `Across all ${metrics.totalPositions} positions matching the applied filters.`
+                : 'Metrics use the full filtered history, not only the visible table page.'}
+            </p>
+          </div>
+          {historicalPositionsQuery.isFetching && (
+            <span className="text-xs text-slate-500">Updating metrics…</span>
+          )}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <MetricCard
+            label="Completed positions"
+            value={metrics ? formatNumber(metrics.totalPositions) : '—'}
+            detail={
+              metrics
+                ? `${metrics.winningPositions} wins · ${metrics.losingPositions} losses · ${metrics.breakevenPositions} breakeven`
+                : 'Waiting for history'
+            }
+          />
+          <MetricCard
+            label="Win rate"
+            value={metrics?.winRatePct == null ? '—' : `${metrics.winRatePct.toFixed(1)}%`}
+            detail="Breakeven positions are excluded"
+          />
+          <MetricCard
+            label="Total trade P&L"
+            value={metrics ? formatCurrency(metrics.totalProfit) : '—'}
+            valueClassName={
+              metrics && metrics.totalProfit < 0
+                ? 'text-rose-300'
+                : metrics && metrics.totalProfit > 0
+                  ? 'text-emerald-300'
+                  : undefined
+            }
+            detail="Sum of completed-position profit"
+          />
+          <MetricCard
+            label="Profit factor"
+            value={metrics?.profitFactor == null ? '—' : metrics.profitFactor.toFixed(2)}
+            detail="Winning profit ÷ absolute losing profit"
+          />
+          <MetricCard
+            label="Average win"
+            value={metrics?.averageWin == null ? '—' : formatCurrency(metrics.averageWin)}
+            valueClassName="text-emerald-300"
+            detail={`${metrics?.winningPositions ?? 0} profitable positions`}
+          />
+          <MetricCard
+            label="Average loss"
+            value={metrics?.averageLoss == null ? '—' : formatCurrency(metrics.averageLoss)}
+            valueClassName="text-rose-300"
+            detail={`${metrics?.losingPositions ?? 0} loss-making positions`}
+          />
+        </div>
+
+        {historicalPositionsQuery.isPending ? (
+          <div className="grid gap-4 xl:grid-cols-2" aria-label="Loading performance charts">
+            {[0, 1].map((chart) => (
+              <div
+                key={chart}
+                className="h-80 animate-pulse rounded-xl border border-slate-800 bg-slate-950/35"
+              />
+            ))}
+          </div>
+        ) : historicalPositionsQuery.isError ? (
+          <div className="rounded-xl border border-rose-900/50 bg-rose-950/20 px-5 py-8 text-center text-sm text-rose-200">
+            Performance charts are unavailable because history could not be loaded.
+          </div>
+        ) : (
+          <HistoryPerformanceCharts
+            dailyPerformance={history?.dailyPerformance ?? []}
+            currency={currency}
+          />
+        )}
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-800/90 bg-[#111720] shadow-lg shadow-black/10">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-5 py-4 sm:px-6">
           <div>
-            <h2 className="text-lg font-medium">Open positions</h2>
+            <h2 className="text-lg font-semibold tracking-tight">
+              Open positions
+            </h2>
             <p className="mt-1 text-sm text-slate-500">
               {snapshotQuery.isPending
                 ? 'Loading positions...'
@@ -134,8 +284,8 @@ export default function IntegrationsPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead className="bg-slate-950/40 text-xs text-slate-500">
+          <table className="w-full min-w-190 text-left text-sm">
+            <thead className="border-y border-slate-800 bg-slate-950/55 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-5 py-3 font-medium sm:px-6">Symbol</th>
                 <th className="px-4 py-3 font-medium">Side</th>
@@ -172,7 +322,10 @@ export default function IntegrationsPage() {
                 ))
               ) : positions && positions.length > 0 ? (
                 positions.map((position) => (
-                  <tr key={position.ticket}>
+                  <tr
+                    key={position.ticket}
+                    className="transition-colors hover:bg-slate-900/60"
+                  >
                     <td className="px-5 py-4 sm:px-6">
                       <span className="font-medium text-slate-100">
                         {position.symbol}
@@ -182,23 +335,25 @@ export default function IntegrationsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <span className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300">
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-xs font-medium ${position.side === 'buy' ? 'border-emerald-900/80 bg-emerald-950/40 text-emerald-300' : 'border-rose-900/80 bg-rose-950/30 text-rose-300'}`}
+                      >
                         {position.side}
                       </span>
                     </td>
                     <td className="px-4 py-4 text-right tabular-nums text-slate-300">
-                      {position.volume}
+                      {formatNumber(position.volume)}
                     </td>
                     <td className="px-4 py-4 text-right tabular-nums text-slate-300">
-                      {position.priceOpen}
+                      {formatNumber(position.priceOpen)}
                     </td>
                     <td className="px-4 py-4 text-right tabular-nums text-slate-300">
-                      {position.priceCurrent}
+                      {formatNumber(position.priceCurrent)}
                     </td>
                     <td
-                      className={`px-4 py-4 text-right font-medium tabular-nums ${position.profit > 0 ? 'text-emerald-300' : 'text-red-300'}`}
+                      className={`px-4 py-4 text-right font-medium tabular-nums ${position.profit > 0 ? 'text-emerald-300' : position.profit < 0 ? 'text-rose-300' : 'text-slate-400'}`}
                     >
-                      {position.profit}
+                      {formatNumber(position.profit)}
                     </td>
                   </tr>
                 ))
@@ -226,31 +381,173 @@ export default function IntegrationsPage() {
               : 'Waiting for the first snapshot.'}
         </p>
       </section>
-      <section className="overflow-hidden rounded-xl border border-slate-800 bg-[#111720]">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-5 py-4 sm:px-6">
+      <section className="overflow-hidden rounded-2xl border border-slate-800/90 bg-[#111720] shadow-lg shadow-black/10">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 px-5 py-5 sm:px-6">
           <div>
-            <h2 className="text-lg font-medium">Completed positions</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="text-lg font-semibold tracking-tight">
+              Completed positions
+            </h2>
+            <p className="mt-1 text-sm text-slate-400">
               {historicalPositionsQuery.isPending
                 ? 'Loading history...'
-                : `${history?.positions.length ?? 0} positions`}
+                : `${history?.metrics.totalPositions ?? 0} matching ${history?.metrics.totalPositions === 1 ? 'position' : 'positions'} · showing ${history?.positions.length ?? 0} on this page`}
             </p>
-            <p className="mt-1 text-xs text-slate-500">
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs text-slate-500">
               {historicalPositionsQuery.isPending
                 ? 'Checking sync time...'
                 : history?.historySyncedAt
-                  ? `Last synced ${new Date(history.historySyncedAt).toLocaleString()}`
+                  ? `Synced ${new Date(history.historySyncedAt).toLocaleString()}`
                   : 'Not synced yet'}
             </p>
+            <button
+              type="button"
+              onClick={() => historicalPositionsQuery.refetch()}
+              disabled={historicalPositionsQuery.isFetching}
+              className="rounded-lg border border-slate-700 bg-slate-900/70 px-3.5 py-2 text-xs font-medium text-slate-300 transition hover:border-teal-700 hover:text-teal-200 disabled:cursor-wait disabled:opacity-60"
+            >
+              {historicalPositionsQuery.isFetching
+                ? 'Refreshing...'
+                : 'Refresh'}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => historicalPositionsQuery.refetch()}
-            disabled={historicalPositionsQuery.isFetching}
-            className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-teal-700 hover:text-teal-200 disabled:cursor-wait disabled:opacity-60"
+        </div>
+        <div className="border-b border-slate-800 bg-slate-950/25 px-5 py-5 sm:px-6">
+          <div className="mb-4">
+            <h3 className="text-sm font-medium text-slate-200">
+              Filter history
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Combine filters, then apply to update the results.
+            </p>
+          </div>
+          <form
+            className="grid grid-cols-2 items-end gap-3 sm:grid-cols-3 xl:grid-cols-6"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (hasPartialDateRange) return;
+              setCursor(null);
+              setCursorHistory([]);
+              setAppliedFilters({
+                fromDate,
+                toDate,
+                symbol: symbol.trim(),
+                magicNumber: magicNumber.trim(),
+                direction,
+                outcome,
+              });
+            }}
           >
-            {historicalPositionsQuery.isFetching ? 'Refreshing...' : 'Refresh'}
-          </button>
+            <label className="text-xs text-slate-400">
+              <span className="mb-1 block">From</span>
+              <input
+                type="date"
+                value={fromDate}
+                max={toDate || undefined}
+                onChange={(event) => setFromDate(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-900/50"
+              />
+            </label>
+
+            <label className="text-xs text-slate-400">
+              <span className="mb-1 block">To</span>
+              <input
+                type="date"
+                value={toDate}
+                min={fromDate || undefined}
+                onChange={(event) => setToDate(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-900/50"
+              />
+            </label>
+
+            <label className="text-xs text-slate-400">
+              <span className="mb-1 block">Symbol</span>
+              <input
+                type="text"
+                value={symbol}
+                onChange={(event) => setSymbol(event.target.value)}
+                placeholder="e.g. XAUUSD"
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-teal-600 focus:ring-2 focus:ring-teal-900/50"
+              />
+            </label>
+
+            <label className="text-xs text-slate-400">
+              <span className="mb-1 block">Magic number</span>
+              <input
+                type="number"
+                step="1"
+                value={magicNumber}
+                onChange={(event) => setMagicNumber(event.target.value)}
+                placeholder="Any"
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-teal-600 focus:ring-2 focus:ring-teal-900/50"
+              />
+            </label>
+
+            <label className="text-xs text-slate-400">
+              <span className="mb-1 block">Side</span>
+              <select
+                value={direction}
+                onChange={(event) => setDirection(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-900/50"
+              >
+                <option value="">Any</option>
+                <option value="buy">Buy</option>
+                <option value="sell">Sell</option>
+              </select>
+            </label>
+
+            <label className="text-xs text-slate-400">
+              <span className="mb-1 block">Outcome</span>
+              <select
+                value={outcome}
+                onChange={(event) => setOutcome(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-900/50"
+              >
+                <option value="">Any</option>
+                <option value="profit">Profit</option>
+                <option value="loss">Loss</option>
+              </select>
+            </label>
+
+            <button
+              type="submit"
+              disabled={hasPartialDateRange}
+              className="rounded-lg bg-teal-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Apply filters
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFromDate('');
+                setToDate('');
+                setSymbol('');
+                setMagicNumber('');
+                setDirection('');
+                setOutcome('');
+                setCursor(null);
+                setCursorHistory([]);
+                setAppliedFilters({
+                  fromDate: '',
+                  toDate: '',
+                  symbol: '',
+                  magicNumber: '',
+                  direction: '',
+                  outcome: '',
+                });
+              }}
+              className="rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:bg-slate-900"
+            >
+              Clear filters
+            </button>
+            {hasPartialDateRange && (
+              <p className="col-span-full text-xs text-amber-300" role="alert">
+                Choose both dates, or clear both, to apply the date range.
+              </p>
+            )}
+          </form>
         </div>
 
         {historicalPositionsQuery.isPending ? (
@@ -275,7 +572,9 @@ export default function IntegrationsPage() {
           </div>
         ) : historicalPositionsQuery.isError ? (
           <div className="px-6 py-12 text-center" role="alert">
-            <p className="text-sm text-red-200">Could not load completed positions.</p>
+            <p className="text-sm text-red-200">
+              Could not load completed positions.
+            </p>
             <button
               type="button"
               onClick={() => historicalPositionsQuery.refetch()}
@@ -285,17 +584,22 @@ export default function IntegrationsPage() {
             </button>
           </div>
         ) : history && history.positions.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1200px] text-left text-sm">
-              <thead className="bg-slate-950/40 text-xs text-slate-500">
+          <>
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-300 text-left text-sm">
+              <thead className="border-y border-slate-800 bg-slate-950/55 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-5 py-3 font-medium sm:px-6">Opened</th>
                   <th className="px-4 py-3 font-medium">Symbol</th>
                   <th className="px-4 py-3 font-medium">Side</th>
                   <th className="px-4 py-3 text-right font-medium">Volume</th>
-                  <th className="px-4 py-3 text-right font-medium">Open price</th>
+                  <th className="px-4 py-3 text-right font-medium">
+                    Open price
+                  </th>
                   <th className="px-4 py-3 font-medium">Closed</th>
-                  <th className="px-4 py-3 text-right font-medium">Close price</th>
+                  <th className="px-4 py-3 text-right font-medium">
+                    Close price
+                  </th>
                   <th className="px-4 py-3 text-right font-medium">Profit</th>
                   <th className="px-5 py-3 text-right font-medium sm:px-6">
                     Position ID
@@ -307,7 +611,10 @@ export default function IntegrationsPage() {
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {history.positions.map((position) => (
-                  <tr key={position.positionId} className="hover:bg-slate-950/30">
+                  <tr
+                    key={position.positionId}
+                    className="transition-colors hover:bg-slate-900/50"
+                  >
                     <td className="whitespace-nowrap px-5 py-4 text-slate-400 sm:px-6">
                       {new Date(position.openedAt).toLocaleString()}
                     </td>
@@ -315,7 +622,9 @@ export default function IntegrationsPage() {
                       {position.symbol}
                     </td>
                     <td className="px-4 py-4">
-                      <span className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300">
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-xs font-medium ${position.side === 'buy' ? 'border-emerald-900/80 bg-emerald-950/40 text-emerald-300' : 'border-rose-900/80 bg-rose-950/30 text-rose-300'}`}
+                      >
                         {position.side}
                       </span>
                     </td>
@@ -328,13 +637,11 @@ export default function IntegrationsPage() {
                     <td className="whitespace-nowrap px-4 py-4 text-slate-400">
                       {new Date(position.closedAt).toLocaleString()}
                     </td>
-                    <td
-                      className="px-4 py-4 text-right tabular-nums text-slate-300"
-                    >
+                    <td className="px-4 py-4 text-right tabular-nums text-slate-300">
                       {formatNumber(position.closedPrice)}
                     </td>
                     <td
-                      className={`px-4 py-4 text-right font-medium tabular-nums ${position.grossProfit > 0 ? 'text-emerald-300' : position.grossProfit < 0 ? 'text-red-300' : 'text-slate-400'}`}
+                      className={`px-4 py-4 text-right font-medium tabular-nums ${position.grossProfit > 0 ? 'text-emerald-300' : position.grossProfit < 0 ? 'text-rose-300' : 'text-slate-400'}`}
                     >
                       {formatNumber(position.grossProfit)}
                     </td>
@@ -348,7 +655,29 @@ export default function IntegrationsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+            <div className="flex items-center justify-between border-t border-slate-800 px-5 py-4 sm:px-6">
+            <button
+              type="button"
+              onClick={goToPreviousHistoryPage}
+              disabled={cursorHistory.length === 0 || historicalPositionsQuery.isFetching}
+              className="rounded-lg border border-slate-700 px-3.5 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="text-xs text-slate-500">
+              Page {cursorHistory.length + 1}
+            </span>
+            <button
+              type="button"
+              onClick={goToNextHistoryPage}
+              disabled={!history.hasMore || historicalPositionsQuery.isFetching}
+              className="rounded-lg border border-slate-700 px-3.5 py-2 text-sm text-slate-300 transition hover:border-teal-700 hover:text-teal-200 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next
+            </button>
+            </div>
+          </>
         ) : (
           <p className="px-6 py-12 text-center text-sm text-slate-400">
             No completed positions are available yet.
@@ -356,5 +685,36 @@ export default function IntegrationsPage() {
         )}
       </section>
     </main>
+  );
+}
+
+type MetricCardProps = {
+  label: string;
+  value: string;
+  detail: string;
+  valueClassName?: string;
+};
+
+function MetricCard({
+  label,
+  value,
+  detail,
+  valueClassName,
+}: MetricCardProps) {
+  return (
+    <article className="min-w-0 rounded-xl border border-slate-800/90 bg-slate-950/45 p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p
+        className={`mt-2 truncate text-2xl font-semibold tabular-nums ${valueClassName ?? 'text-slate-100'}`}
+        title={value}
+      >
+        {value}
+      </p>
+      <p className="mt-2 truncate text-xs text-slate-500" title={detail}>
+        {detail}
+      </p>
+    </article>
   );
 }

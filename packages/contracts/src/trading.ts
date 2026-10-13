@@ -61,9 +61,31 @@ export const historicalPositionResponseSchema = z.object({
   grossProfit: z.number(),
 });
 
+export const historicalPositionMetricsSchema = z.object({
+  totalPositions: z.number().int().nonnegative(),
+  winningPositions: z.number().int().nonnegative(),
+  losingPositions: z.number().int().nonnegative(),
+  breakevenPositions: z.number().int().nonnegative(),
+  winRatePct: z.number().min(0).max(100).nullable(),
+  totalProfit: z.number(),
+  averageWin: z.number().nullable(),
+  averageLoss: z.number().nullable(),
+  profitFactor: z.number().nonnegative().nullable(),
+});
+
+export const historicalPositionDailyPerformanceSchema = z.object({
+  date: z.iso.date(),
+  profit: z.number(),
+  cumulativeProfit: z.number(),
+});
+
 export const historicalPositionsResponseSchema = z.object({
   positions: z.array(historicalPositionResponseSchema),
+  metrics: historicalPositionMetricsSchema,
+  dailyPerformance: z.array(historicalPositionDailyPerformanceSchema),
   historySyncedAt: z.iso.datetime().nullable(),
+  hasMore: z.boolean(),
+  nextCursor: z.string().min(1).nullable(),
 });
 
 export const mt5HistoryUploadResponseSchema = z.object({
@@ -80,6 +102,10 @@ export type sharedSnapshotResponse = z.infer<
   typeof sharedSnapshotResponseSchema
 >;
 export type HistoricalDeal = z.infer<typeof historicalDealResponseSchema>;
-export type HistoricalPosition = z.infer<typeof historicalPositionResponseSchema>;
+export type HistoricalPosition = z.infer<
+  typeof historicalPositionResponseSchema
+>;
 export type Mt5HistoryUpload = z.infer<typeof mt5HistoryUploadResponseSchema>;
-export type HistoricalPositions = z.infer<typeof historicalPositionsResponseSchema>;
+export type HistoricalPositions = z.infer<
+  typeof historicalPositionsResponseSchema
+>;

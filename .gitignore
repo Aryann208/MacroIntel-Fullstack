@@ -11,4 +11,5 @@ coverage/
 __pycache__/
 *.py[cod]
 next-env.d.ts
-source-material
+source-material/*
+!source-material/account-metrics-and-performance-charts.md

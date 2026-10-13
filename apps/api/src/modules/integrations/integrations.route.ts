@@ -7,8 +7,10 @@ import {
 import { Router } from 'express';
 import { Account } from './models/account.model.js';
 import { HistoricalTrades } from './models/historicalTrades.model.js';
+import { directionEnum, outcomeEnum } from '../../utils/types.js';
 
 let latestSnapshot: sharedSnapshotResponse | null = null;
+const historicalPositionsPageSize = 10;
 export const integrationsRouter: Router = Router();
 
 integrationsRouter.post('/mt5/snapshot', (req, res) => {
@@ -66,7 +68,37 @@ integrationsRouter.post('/mt5/getHistory', async (req, res) => {
 
 integrationsRouter.get('/mt5/getHistory', async (req, res) => {
   const { login, server } = req.query;
+  const fromValue = req.query.from;
+  const toValue = req.query.to;
+  const magicNumberFilter = req.query.magicNumber;
+  const symbolFilter = req.query.symbol;
+  const directionFilter = req.query.direction;
+  const outcomeFilter = req.query.outcome;
+  const cursorValue = req.query.cursor;
+  let cursorClosedAt: string | undefined;
+  let cursorPositionId: string | undefined;
 
+  if (cursorValue !== undefined) {
+    if (typeof cursorValue !== 'string') {
+      return res.status(400).json({ error: 'Invalid cursor' });
+    }
+
+    const cursorParts = cursorValue.split('~');
+    const closedAt = cursorParts[0];
+    const positionId = cursorParts[1];
+
+    if (
+      cursorParts.length !== 2 ||
+      !closedAt ||
+      !positionId ||
+      Number.isNaN(Date.parse(closedAt))
+    ) {
+      return res.status(400).json({ error: 'Invalid cursor' });
+    }
+
+    cursorClosedAt = closedAt;
+    cursorPositionId = positionId;
+  }
   if (typeof login !== 'string' || typeof server !== 'string') {
     return res.status(400).json({ error: 'login and server are required' });
   }
@@ -136,8 +168,160 @@ integrationsRouter.get('/mt5/getHistory', async (req, res) => {
     });
   }
 
+  let filteredPositions = positions;
+
+  //filtering by magic numbers
+  if (magicNumberFilter !== undefined) {
+    if (Number.isNaN(Number(magicNumberFilter))) {
+      return res.status(400).json({ error: 'Invalid magic number' });
+    }
+    filteredPositions = filteredPositions.filter(
+      (position) => position.magic === Number(magicNumberFilter),
+    );
+  }
+  // Filtering by symbol
+  if (symbolFilter !== undefined) {
+    if (typeof symbolFilter !== 'string') {
+      return res.status(400).json({ error: 'Invalid symbol' });
+    }
+    filteredPositions = filteredPositions.filter(
+      (position) => position.symbol === symbolFilter,
+    );
+  }
+  // Filtering by direction
+  if (directionFilter !== undefined) {
+    if (
+      typeof directionFilter !== 'string' ||
+      !directionEnum.includes(String(directionFilter))
+    ) {
+      return res.status(400).json({ error: 'Invalid direction' });
+    }
+    filteredPositions = filteredPositions.filter(
+      (position) => position.side === directionFilter,
+    );
+  }
+  // Filtering by symbol
+  if (outcomeFilter !== undefined) {
+    if (
+      typeof outcomeFilter !== 'string' ||
+      !outcomeEnum.includes(String(outcomeFilter))
+    ) {
+      return res.status(400).json({ error: 'Invalid outcome' });
+    }
+    filteredPositions = filteredPositions.filter((position) => {
+      if (outcomeFilter === 'profit') return position.grossProfit > 0;
+      else if (outcomeFilter === 'loss') return position.grossProfit < 0;
+    });
+  }
+  // Filtering by date
+  if (fromValue !== undefined || toValue !== undefined) {
+    if (typeof fromValue !== 'string' || typeof toValue !== 'string') {
+      return res
+        .status(400)
+        .json({ error: 'from and to must be provided together' });
+    }
+    const fromMs = new Date(fromValue).getTime();
+    const toMs = new Date(toValue).getTime();
+
+    if (Number.isNaN(fromMs) || Number.isNaN(toMs) || fromMs >= toMs) {
+      return res.status(400).json({ error: 'Invalid date range' });
+    }
+    filteredPositions = filteredPositions.filter((position) => {
+      const closedAtMs = new Date(position.closedAt).getTime();
+      return closedAtMs >= fromMs && closedAtMs < toMs;
+    });
+  }
+  filteredPositions.sort(
+    (firstPosition, secondPosition) =>
+      secondPosition.closedAt.localeCompare(firstPosition.closedAt) ||
+      secondPosition.positionId.localeCompare(firstPosition.positionId),
+  );
+
+  let winningPositions = 0;
+  let losingPositions = 0;
+  let breakevenPositions = 0;
+  let totalProfit = 0;
+  let winningProfit = 0;
+  let losingProfit = 0;
+  const profitByDay = new Map<string, number>();
+
+  for (const position of filteredPositions) {
+    totalProfit += position.grossProfit;
+    if (position.grossProfit > 0) {
+      winningPositions += 1;
+      winningProfit += position.grossProfit;
+    } else if (position.grossProfit < 0) {
+      losingPositions += 1;
+      losingProfit += position.grossProfit;
+    } else {
+      breakevenPositions += 1;
+    }
+
+    const closedDate = position.closedAt.slice(0, 10);
+    const currentDayProfit = profitByDay.get(closedDate) ?? 0;
+    profitByDay.set(closedDate, currentDayProfit + position.grossProfit);
+  }
+
+  const decidedPositions = winningPositions + losingPositions;
+  const lossAmount = Math.abs(losingProfit);
+  let cumulativeProfit = 0;
+  const dailyPerformance = Array.from(profitByDay.entries())
+    .sort(([firstDate], [secondDate]) => firstDate.localeCompare(secondDate))
+    .map(([date, profit]) => {
+      cumulativeProfit += profit;
+      return { date, profit, cumulativeProfit };
+    });
+
+  const metrics = {
+    totalPositions: filteredPositions.length,
+    winningPositions,
+    losingPositions,
+    breakevenPositions,
+    winRatePct:
+      decidedPositions === 0
+        ? null
+        : (winningPositions / decidedPositions) * 100,
+    totalProfit,
+    averageWin:
+      winningPositions === 0 ? null : winningProfit / winningPositions,
+    averageLoss:
+      losingPositions === 0 ? null : losingProfit / losingPositions,
+    profitFactor: lossAmount === 0 ? null : winningProfit / lossAmount,
+  };
+
+  let positionsAfterCursor = filteredPositions;
+  if (cursorClosedAt !== undefined && cursorPositionId !== undefined) {
+    const afterClosedAt = cursorClosedAt;
+    const afterPositionId = cursorPositionId;
+    positionsAfterCursor = filteredPositions.filter(
+      (position) =>
+        position.closedAt.localeCompare(afterClosedAt) < 0 ||
+        (position.closedAt === afterClosedAt &&
+          position.positionId.localeCompare(afterPositionId) < 0),
+    );
+  }
+
+  const pageWithExtraPosition = positionsAfterCursor.slice(
+    0,
+    historicalPositionsPageSize + 1,
+  );
+  const hasMore = pageWithExtraPosition.length > historicalPositionsPageSize;
+  const pagePositions = pageWithExtraPosition.slice(
+    0,
+    historicalPositionsPageSize,
+  );
+  const lastPosition = pagePositions[pagePositions.length - 1];
+  const nextCursor =
+    hasMore && lastPosition
+      ? `${lastPosition.closedAt}~${lastPosition.positionId}`
+      : null;
+
   return res.status(200).json({
-    positions,
+    positions: pagePositions,
+    metrics,
+    dailyPerformance,
     historySyncedAt: account.historySyncedAt?.toISOString() ?? null,
+    hasMore,
+    nextCursor,
   });
 });
