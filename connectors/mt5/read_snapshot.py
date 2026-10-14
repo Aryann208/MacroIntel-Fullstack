@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
+import os
 import sys
 import time
-from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -15,7 +19,6 @@ from urllib.request import Request, urlopen
 POLL_INTERVAL_SECONDS = 1
 HISTORY_SYNC_INTERVAL_SECONDS = 60
 DEFAULT_API_URL = "http://127.0.0.1:4000/api/v1/integrations/mt5/snapshot"
-DEFAULT_HISTORY_API_URL = "http://127.0.0.1:4000/api/v1/integrations/mt5/getHistory"
 
 
 class SnapshotReadError(Exception):
@@ -87,11 +90,41 @@ def read_snapshot(mt5: Any) -> dict[str, Any]:
     }
 
 
-def send_snapshot(api_url: str, snapshot: dict[str, Any]) -> None:
+def signed_headers(body: bytes, secret: str) -> dict[str, str]:
+    timestamp = str(int(time.time()))
+    signature = hmac.new(secret.encode("utf-8"), digestmod=hashlib.sha256)
+    signature.update(f"{timestamp}\n".encode("utf-8"))
+    signature.update(body)
+    return {
+        "Content-Type": "application/json",
+        "X-MT5-Timestamp": timestamp,
+        "X-MT5-Signature": signature.hexdigest(),
+    }
+
+
+def connector_secret() -> str | None:
+    secret = os.environ.get("MT5_CONNECTOR_SECRET")
+    if secret:
+        return secret
+
+    env_files = (
+        Path(__file__).resolve().with_name(".env"),
+        Path(__file__).resolve().parents[2] / ".env",
+    )
+    for env_file in env_files:
+        if env_file.is_file():
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                if line.startswith("MT5_CONNECTOR_SECRET="):
+                    return line.partition("=")[2].strip().strip('"').strip("'")
+    return None
+
+
+def send_snapshot(api_url: str, snapshot: dict[str, Any], secret: str) -> None:
+    body = json.dumps(snapshot).encode("utf-8")
     request = Request(
         api_url,
-        data=json.dumps(snapshot).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        data=body,
+        headers=signed_headers(body, secret),
         method="POST",
     )
 
@@ -113,7 +146,7 @@ def read_history(
     if account is None:
         raise HistoryReadError(f"account_info failed: {mt5.last_error()}")
 
-    deals = mt5.history_deals_get(int(date_from.timestamp()), int(date_to.timestamp()))
+    deals = mt5.history_deals_get(date_from, date_to)
     if deals is None:
         raise HistoryReadError(f"history_deals_get failed: {mt5.last_error()}")
 
@@ -166,11 +199,12 @@ def read_history(
     }
 
 
-def send_history(api_url: str, history: dict[str, Any]) -> None:
+def send_history(api_url: str, history: dict[str, Any], secret: str) -> None:
+    body = json.dumps(history).encode("utf-8")
     request = Request(
         api_url,
-        data=json.dumps(history).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        data=body,
+        headers=signed_headers(body, secret),
         method="POST",
     )
 
@@ -203,21 +237,38 @@ def main() -> int:
         help="Confirm the selected terminal and account are correct.",
     )
     parser.add_argument(
+        "--expected-login",
+        help="Stop if the terminal is signed in to a different account.",
+    )
+    parser.add_argument(
+        "--expected-server",
+        help="Stop if the terminal is connected to a different broker server.",
+    )
+    parser.add_argument(
+        "--portable",
+        action="store_true",
+        help="Use an isolated portable MT5 installation.",
+    )
+    parser.add_argument(
         "--api-url",
         default=DEFAULT_API_URL,
         help=f"Snapshot endpoint URL (default: {DEFAULT_API_URL})",
     )
     parser.add_argument(
         "--history-api-url",
-        default=DEFAULT_HISTORY_API_URL,
-        help=f"History endpoint URL (default: {DEFAULT_HISTORY_API_URL})",
+        default=None,
+        help="History endpoint URL (default: same API origin as --api-url)",
     )
     args = parser.parse_args()
+    history_api_url = args.history_api_url or args.api_url.rsplit("/", 1)[0] + "/getHistory"
 
     if not args.confirm_account:
         parser.error("pass --confirm-account after verifying the terminal")
     if not args.terminal_path.is_file():
         parser.error(f"terminal executable not found: {args.terminal_path}")
+    secret = connector_secret()
+    if not secret or len(secret) < 32:
+        parser.error("set MT5_CONNECTOR_SECRET to the same key configured on the API")
 
     try:
         import MetaTrader5 as mt5
@@ -228,7 +279,9 @@ def main() -> int:
         )
         return 1
 
-    connected = mt5.initialize(str(args.terminal_path), timeout=10_000)
+    connected = mt5.initialize(
+        str(args.terminal_path), timeout=10_000, portable=args.portable
+    )
     if not connected:
         print(f"Could not connect to the terminal: {mt5.last_error()}", file=sys.stderr)
         return 1
@@ -238,41 +291,79 @@ def main() -> int:
         if terminal is None or not terminal.connected:
             print("The terminal is not connected to its broker server.", file=sys.stderr)
             return 1
+        account = mt5.account_info()
+        if account is None:
+            print(f"Could not read the account: {mt5.last_error()}", file=sys.stderr)
+            return 1
+        if args.expected_login and str(account.login) != args.expected_login:
+            print("The terminal is signed in to a different account.", file=sys.stderr)
+            return 1
+        if args.expected_server and account.server != args.expected_server:
+            print("The terminal is connected to a different broker server.", file=sys.stderr)
+            return 1
 
         last_history_sync = datetime(1970, 1, 1, tzinfo=timezone.utc)
         next_history_sync = 0.0
+        read_failures = 0
+        history_upload = None
+        pending_history_end = None
+        pending_history_count = 0
 
-        while True:
-            cycle_started_at = time.monotonic()
+        with ThreadPoolExecutor(max_workers=1) as uploader:
+            while True:
+                cycle_started_at = time.monotonic()
 
-            try:
-                snapshot = read_snapshot(mt5)
-                send_snapshot(args.api_url, snapshot)
-            except (SnapshotReadError, SnapshotSendError) as error:
-                print(f"Snapshot cycle failed: {error}", file=sys.stderr, flush=True)
-
-            if time.monotonic() >= next_history_sync:
-                history_end = datetime.now(timezone.utc)
                 try:
-                    history = read_history(mt5, last_history_sync, history_end)
-                    print(
-                        f"Uploading {len(history['deals'])} history deals",
-                        flush=True,
-                    )
-                    send_history(args.history_api_url, history)
-                    last_history_sync = history_end.replace(microsecond=0)
-                    print(
-                        f"History sync complete: {len(history['deals'])} deals",
-                        flush=True,
-                    )
-                except (HistoryReadError, HistorySendError) as error:
-                    print(f"History sync failed: {error}", file=sys.stderr, flush=True)
-                next_history_sync = (
-                    time.monotonic() + HISTORY_SYNC_INTERVAL_SECONDS
-                )
+                    terminal = mt5.terminal_info()
+                    if terminal is None or not terminal.connected:
+                        raise SnapshotReadError("The terminal is disconnected")
+                    snapshot = read_snapshot(mt5)
+                    if args.expected_login and snapshot["account"]["login"] != args.expected_login:
+                        raise RuntimeError("The terminal switched to another account")
+                    if args.expected_server and snapshot["account"]["server"] != args.expected_server:
+                        raise RuntimeError("The terminal switched to another broker server")
+                    read_failures = 0
+                    send_snapshot(args.api_url, snapshot, secret)
+                except SnapshotReadError as error:
+                    read_failures += 1
+                    print(f"Snapshot cycle failed: {error}", file=sys.stderr, flush=True)
+                    if read_failures >= 3:
+                        print("MT5 reads failed three times; restarting the reader.", file=sys.stderr, flush=True)
+                        return 1
+                except SnapshotSendError as error:
+                    print(f"Snapshot cycle failed: {error}", file=sys.stderr, flush=True)
 
-            elapsed = time.monotonic() - cycle_started_at
-            time.sleep(max(0, POLL_INTERVAL_SECONDS - elapsed))
+                if history_upload is not None and history_upload.done():
+                    try:
+                        history_upload.result()
+                        last_history_sync = pending_history_end
+                        print(
+                            f"History sync complete: {pending_history_count} deals",
+                            flush=True,
+                        )
+                    except HistorySendError as error:
+                        print(f"History sync failed: {error}", file=sys.stderr, flush=True)
+                    history_upload = None
+
+                if history_upload is None and time.monotonic() >= next_history_sync:
+                    history_end = datetime.now(timezone.utc)
+                    try:
+                        # This demo terminal reports deal times ahead of the VPS clock.
+                        history = read_history(
+                            mt5, last_history_sync, history_end + timedelta(days=1)
+                        )
+                        pending_history_count = len(history["deals"])
+                        pending_history_end = history_end.replace(microsecond=0)
+                        print(f"Uploading {pending_history_count} history deals", flush=True)
+                        history_upload = uploader.submit(
+                            send_history, history_api_url, history, secret
+                        )
+                    except HistoryReadError as error:
+                        print(f"History sync failed: {error}", file=sys.stderr, flush=True)
+                    next_history_sync = time.monotonic() + HISTORY_SYNC_INTERVAL_SECONDS
+
+                elapsed = time.monotonic() - cycle_started_at
+                time.sleep(max(0, POLL_INTERVAL_SECONDS - elapsed))
     except KeyboardInterrupt:
         print("Stopping MT5 snapshot reader.", file=sys.stderr)
         return 0

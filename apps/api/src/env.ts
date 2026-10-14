@@ -22,6 +22,7 @@ const schema = z.object({
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
   JWT_SECRET: z.string().min(32),
+  MT5_CONNECTOR_SECRET: z.string().min(32).optional(),
   FRED_API_KEY: z
     .string()
     .regex(

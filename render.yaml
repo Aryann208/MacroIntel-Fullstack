@@ -13,6 +13,8 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      - key: MT5_CONNECTOR_SECRET
+        sync: false
       - key: WEB_ORIGIN
         fromService:
           name: macrointel-web

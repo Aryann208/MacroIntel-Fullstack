@@ -110,6 +110,12 @@ export function UpcomingEvents() {
             const dateLabel = event.dateOnly
               ? scheduledAt.toLocaleDateString(undefined, { timeZone: 'UTC' })
               : scheduledAt.toLocaleString();
+            const importanceColor =
+              event.importance === 'high'
+                ? 'text-red-300'
+                : event.importance === 'medium'
+                  ? 'text-amber-300'
+                  : 'text-yellow-200';
 
             return (
               <li
@@ -121,14 +127,15 @@ export function UpcomingEvents() {
                     {event.name}
                   </p>
                   {event.importance && (
-                    <span className="text-xs uppercase text-amber-300">
-                      {event.importance}
+                    <span className={`text-xs uppercase ${importanceColor}`}>
+                      {event.importance} impact
                     </span>
                   )}
                 </div>
 
                 <p className="mt-2 text-sm leading-6 text-slate-400">
-                  {event.country} · Release date: {dateLabel}
+                  {event.country} ·{' '}
+                  {event.dateOnly ? 'Release date' : 'Scheduled'}: {dateLabel}
                 </p>
 
                 {event.forecast !== null && (

@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import express, { type ErrorRequestHandler, type Express } from 'express';
+import express, {
+  type ErrorRequestHandler,
+  type Express,
+  type Request,
+  type Response,
+} from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import type { Logger } from 'pino';
@@ -20,8 +25,32 @@ export function createApp(options: {
   const app = express();
 
   app.use(helmet());
-  app.use(cors({ origin: options.origin }));
-  app.use(express.json());
+  const allowedOrigins = new Set(
+    [options.origin, process.env.VERCEL_WEB_ORIGIN].filter(
+      (origin): origin is string => Boolean(origin),
+    ),
+  );
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        callback(null, !origin || allowedOrigins.has(origin));
+      },
+    }),
+  );
+  app.use(
+    express.json({
+      verify: (req, res, body) => {
+        const request = req as Request;
+        const response = res as Response;
+        if (
+          request.method === 'POST' &&
+          request.originalUrl.startsWith('/api/v1/integrations/mt5/')
+        ) {
+          response.locals.mt5RawBody = Buffer.from(body);
+        }
+      },
+    }),
+  );
 
   app.use((req, res, next) => {
     const requestId = randomUUID();

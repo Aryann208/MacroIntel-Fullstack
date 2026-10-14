@@ -7,13 +7,14 @@ import {
 import { Router } from 'express';
 import { Account } from './models/account.model.js';
 import { HistoricalTrades } from './models/historicalTrades.model.js';
+import { requireMt5Signature } from './mt5-signature.middleware.js';
 import { directionEnum, outcomeEnum } from '../../utils/types.js';
 
 let latestSnapshot: sharedSnapshotResponse | null = null;
 const historicalPositionsPageSize = 10;
 export const integrationsRouter: Router = Router();
 
-integrationsRouter.post('/mt5/snapshot', (req, res) => {
+integrationsRouter.post('/mt5/snapshot', requireMt5Signature, (req, res) => {
   const result = sharedSnapshotResponseSchema.safeParse(req.body);
   if (!result.success) {
     return res.status(400).json({ error: 'Invalid Snapshot' });
@@ -35,7 +36,7 @@ integrationsRouter.get('/mt5/snapshot', (req, res) => {
   return res.json(latestSnapshot);
 });
 
-integrationsRouter.post('/mt5/getHistory', async (req, res) => {
+integrationsRouter.post('/mt5/getHistory', requireMt5Signature, async (req, res) => {
   const result = await mt5HistoryUploadResponseSchema.safeParse(req.body);
   if (!result.success) {
     return res.status(400).json({ error: 'Error retrieving historial deals' });

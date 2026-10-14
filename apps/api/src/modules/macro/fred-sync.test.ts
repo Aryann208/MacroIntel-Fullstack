@@ -12,12 +12,19 @@ const provider = vi.hoisted(() => ({
   fetchSeriesRelease: vi.fn(),
   fetchReleaseDates: vi.fn(),
 }));
+const calendar = vi.hoisted(() => ({
+  fetchReleaseCalendar: vi.fn(),
+}));
 
 vi.mock('./fred.client.js', () => ({
   fetchFredSeries: vi.fn(),
   fetchFredObservations: vi.fn(),
   fetchFredSeriesRelease: provider.fetchSeriesRelease,
   fetchFredReleaseDates: provider.fetchReleaseDates,
+}));
+
+vi.mock('./fred-calendar.client.js', () => ({
+  fetchFredReleaseCalendar: calendar.fetchReleaseCalendar,
 }));
 
 vi.mock('./models/macro-series.model.js', () => ({
@@ -58,6 +65,14 @@ beforeEach(() => {
     id: 10,
     name: 'Consumer Price Index',
   });
+  calendar.fetchReleaseCalendar.mockImplementation(async (_releaseId, year) =>
+    year === 2026
+      ? new Map([
+          ['2026-09-28', new Date('2026-09-28T12:30:00Z')],
+          ['2026-10-14', new Date('2026-10-14T12:30:00Z')],
+        ])
+      : new Map(),
+  );
   provider.fetchReleaseDates.mockResolvedValue([
     { release_id: 10, date: '2026-09-27' },
     { release_id: 10, date: '2026-09-28' },
@@ -82,9 +97,9 @@ describe('FRED calendar ingestion', () => {
       'release-10:2026-10-14',
     ]);
     expect(database.upsertEvent.mock.calls[0]?.[1].$set).toMatchObject({
-      scheduledAt: new Date('2026-09-28T00:00:00Z'),
-      dateOnly: true,
-      importance: null,
+      scheduledAt: new Date('2026-09-28T12:30:00Z'),
+      dateOnly: false,
+      importance: 'high',
       forecast: null,
     });
 
@@ -97,7 +112,6 @@ describe('FRED calendar ingestion', () => {
 
     expect(database.deleteEvents).toHaveBeenCalledWith({
       provider: 'fred',
-      dateOnly: true,
       scheduledAt: { $gte: new Date('2026-09-28T00:00:00Z') },
       providerEventId: {
         $regex: '^release-10:',
@@ -107,12 +121,12 @@ describe('FRED calendar ingestion', () => {
   });
 
   it('preserves the stored calendar when the provider request fails', async () => {
-    provider.fetchReleaseDates.mockRejectedValueOnce(
-      new Error('FRED unavailable'),
+    calendar.fetchReleaseCalendar.mockRejectedValueOnce(
+      new Error('FRED calendar unavailable'),
     );
 
     await expect(syncFredCalendar('test-key')).rejects.toThrow(
-      'FRED unavailable',
+      'FRED calendar unavailable',
     );
     expect(database.upsertEvent).not.toHaveBeenCalled();
     expect(database.deleteEvents).not.toHaveBeenCalled();

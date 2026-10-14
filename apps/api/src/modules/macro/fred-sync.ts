@@ -4,6 +4,7 @@ import {
   fetchFredSeries,
   fetchFredSeriesRelease,
 } from './fred.client.js';
+import { fetchFredReleaseCalendar } from './fred-calendar.client.js';
 import { EconomicEvent } from './models/economic-event.model.js';
 import { MacroObservation } from './models/macro-observation.model.js';
 import { MacroSeries } from './models/macro-series.model.js';
@@ -20,6 +21,13 @@ const SERIES_CATALOG: SeriesConfig[] = [
   {
     id: 'CPIAUCSL',
     shortName: 'CPI',
+    category: 'inflation',
+    country: 'US',
+    currency: 'USD',
+  },
+  {
+    id: 'CPILFESL',
+    shortName: 'Core CPI',
     category: 'inflation',
     country: 'US',
     currency: 'USD',
@@ -53,6 +61,13 @@ const SERIES_CATALOG: SeriesConfig[] = [
     currency: 'USD',
   },
   {
+    id: 'PCEPILFE',
+    shortName: 'Core PCE',
+    category: 'inflation',
+    country: 'US',
+    currency: 'USD',
+  },
+  {
     id: 'PAYEMS',
     shortName: 'Nonfarm Employment',
     category: 'employment',
@@ -73,7 +88,48 @@ const SERIES_CATALOG: SeriesConfig[] = [
     country: 'US',
     currency: 'USD',
   },
+  {
+    id: 'JTSJOL',
+    shortName: 'Job Openings',
+    category: 'employment',
+    country: 'US',
+    currency: 'USD',
+  },
+  {
+    id: 'PPIACO',
+    shortName: 'Producer Prices',
+    category: 'inflation',
+    country: 'US',
+    currency: 'USD',
+  },
+  {
+    id: 'RSAFS',
+    shortName: 'Retail Sales',
+    category: 'growth',
+    country: 'US',
+    currency: 'USD',
+  },
 ];
+
+type Importance = 'low' | 'medium' | 'high';
+
+// Our expected market impact for each tracked series, using calendar-style levels.
+// This is not a copy of Forex Factory's ratings.
+const severityMap: Record<string, Importance> = {
+  CPIAUCSL: 'high',
+  CPILFESL: 'high',
+  UNRATE: 'high',
+  PAYEMS: 'high',
+  PCEPI: 'high',
+  PCEPILFE: 'high',
+  GDPC1: 'high',
+  RSAFS: 'high',
+  JTSJOL: 'medium',
+  PPIACO: 'medium',
+  INDPRO: 'medium',
+  FEDFUNDS: 'low',
+  DGS10: 'low',
+};
 
 function normalizeFrequency(value: string) {
   switch (value) {
@@ -256,7 +312,46 @@ export async function syncFredCalendar(apiKey: string) {
       continue;
     }
 
-    const releaseDates = await fetchFredReleaseDates(release.id, apiKey);
+    const severity = severityMap[item.providerSeriesId];
+    if (!severity) {
+      throw new Error(`Missing severity for ${item.providerSeriesId}`);
+    }
+
+    const calendarDates = new Map<string, Date | null>();
+    const year = today.getUTCFullYear();
+    for (const calendarYear of [year, year + 1]) {
+      const dates = await fetchFredReleaseCalendar(release.id, calendarYear);
+      for (const [date, scheduledAt] of dates) {
+        calendarDates.set(date, scheduledAt);
+      }
+    }
+
+    const releaseDates: {
+      date: string;
+      scheduledAt: Date;
+      dateOnly: boolean;
+    }[] = [];
+    for (const [date, releaseTime] of calendarDates) {
+      if (date >= todayString) {
+        releaseDates.push({
+          date,
+          scheduledAt: releaseTime ?? parseFredDate(date),
+          dateOnly: releaseTime === null,
+        });
+      }
+    }
+
+    // Some releases have no future entries on FRED's calendar yet.
+    if (releaseDates.length === 0) {
+      const dates = await fetchFredReleaseDates(release.id, apiKey);
+      for (const entry of dates) {
+        releaseDates.push({
+          date: entry.date,
+          scheduledAt: parseFredDate(entry.date),
+          dateOnly: true,
+        });
+      }
+    }
     const upcomingDates = releaseDates.filter(
       (entry) => entry.date >= todayString,
     );
@@ -265,7 +360,6 @@ export async function syncFredCalendar(apiKey: string) {
     for (const entry of upcomingDates) {
       const providerEventId = `release-${release.id}:${entry.date}`;
       eventIds.push(providerEventId);
-
       await EconomicEvent.findOneAndUpdate(
         { provider: 'fred', providerEventId },
         {
@@ -275,9 +369,9 @@ export async function syncFredCalendar(apiKey: string) {
             country: item.country,
             currency: item.currency,
             category: item.category,
-            importance: null,
-            scheduledAt: parseFredDate(entry.date),
-            dateOnly: true,
+            importance: severity,
+            scheduledAt: entry.scheduledAt,
+            dateOnly: entry.dateOnly,
             status: 'scheduled',
             actual: null,
             forecast: null,
@@ -285,7 +379,7 @@ export async function syncFredCalendar(apiKey: string) {
             revisedPrevious: null,
             releasedAt: null,
             unit: item.unit,
-            sourceUrl: `https://fred.stlouisfed.org/release?rid=${release.id}`,
+            sourceUrl: `https://fred.stlouisfed.org/releases/calendar?rid=${release.id}`,
           },
         },
         { upsert: true, runValidators: true },
@@ -295,7 +389,6 @@ export async function syncFredCalendar(apiKey: string) {
     // Refresh only this release's future calendar entries if its schedule changes.
     await EconomicEvent.deleteMany({
       provider: 'fred',
-      dateOnly: true,
       scheduledAt: { $gte: today },
       providerEventId: {
         $regex: `^release-${release.id}:`,

@@ -463,13 +463,18 @@ export default function IntegrationsPage() {
 
             <label className="text-xs text-slate-400">
               <span className="mb-1 block">Symbol</span>
-              <input
-                type="text"
+              <select
                 value={symbol}
                 onChange={(event) => setSymbol(event.target.value)}
-                placeholder="e.g. XAUUSD"
-                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-teal-600 focus:ring-2 focus:ring-teal-900/50"
-              />
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-900/50"
+              >
+                <option value="">Any</option>
+                <option value="XAUUSD">XAUUSD</option>
+                <option value="XAGUSD">XAGUSD</option>
+                <option value="GBPJPY">GBPJPY</option>
+                <option value="EURUSD">EURUSD</option>
+                <option value="USDCHF">USDCHF</option>
+              </select>
             </label>
 
             <label className="text-xs text-slate-400">

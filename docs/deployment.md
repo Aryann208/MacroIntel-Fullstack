@@ -9,3 +9,11 @@ This setup runs the Next.js web app and Express API as two Render free web servi
 5. To populate Atlas, set the ignored root `.env` to the Atlas `MONGODB_URI` and your `FRED_API_KEY`, then run `pnpm --filter @macrointel/api ingest:fred` from the repository root. Your computer's IP must also be allowed in Atlas. Refresh the web page after the import. Repeat the command whenever you want fresh data. Restore your local `.env` if you want local development to use Docker MongoDB again.
 
 Render free web services can sleep when idle, so the first request after a pause can take longer. A successful local build does not verify Render or Atlas connectivity; check the deployed endpoints after setup. `NEXT_PUBLIC_API_URL` is bundled into the web build, so a changed API origin needs a web rebuild. The API only permits the deployed web origin through CORS.
+
+## MT5 demo connector
+
+The MT5 reader runs on the GCP Windows VM against the already logged-in `C:\Program Files\FTMO Global Markets MT5 Terminal\terminal64.exe`, separate from the FundedNext trading terminal. It requires demo login `114054496` on `MetaQuotes-Demo`. The Render web and API services do not run MT5. The `MacroIntel-Demo-MT5-Reader` logon task runs the connector in `C:\bots\macrointel_reader` and points it at `https://macrointel-api.onrender.com/api/v1/integrations/mt5/snapshot`. The history endpoint follows the same API origin automatically. See [connector setup](../connectors/mt5/README.md).
+
+As of 14 October 2026, the deployed Render API still accepts unsigned snapshot requests; the HMAC middleware in this checkout has not been deployed. To enforce signatures, deploy that API change and configure its private `MT5_CONNECTOR_SECRET` to match the ignored `connectors/mt5/.env` file used by the GCP connector.
+
+The Integrations snapshot is held in API process memory and expires after three seconds. Keep the reader running for the demo; a stopped reader or sleeping/restarted API will show an unavailable snapshot until the next upload.
