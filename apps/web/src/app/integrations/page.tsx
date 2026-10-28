@@ -6,6 +6,7 @@ import { useFetchMT5Snapshot } from '../../components/use-fetch-mt5-snapshot-pro
 
 export default function IntegrationsPage() {
   const snapshotQuery = useFetchMT5Snapshot();
+  const demoPaused = (snapshotQuery.data?.account.balance ?? 0) < 0;
   const login = snapshotQuery.data?.account.login;
   const server = snapshotQuery.data?.account.server;
   const [fromDate, setFromDate] = useState('');
@@ -45,17 +46,23 @@ export default function IntegrationsPage() {
     ? 'Loading'
     : snapshotQuery.isError
       ? 'Error'
-      : 'Live';
+      : demoPaused
+        ? 'Demo paused'
+        : 'Live';
   const statusColor = snapshotQuery.isPending
     ? 'border-slate-700 bg-slate-900/70 text-slate-300'
     : snapshotQuery.isError
       ? 'border-red-900/70 bg-red-950/40 text-red-200'
-      : 'border-emerald-900/70 bg-emerald-950/40 text-emerald-200';
+      : demoPaused
+        ? 'border-amber-800/70 bg-amber-950/40 text-amber-200'
+        : 'border-emerald-900/70 bg-emerald-950/40 text-emerald-200';
   const statusDotColor = snapshotQuery.isPending
     ? 'bg-slate-400'
     : snapshotQuery.isError
       ? 'bg-red-400'
-      : 'bg-emerald-300';
+      : demoPaused
+        ? 'bg-amber-300'
+        : 'bg-emerald-300';
   const formatMetricLabel = (key: string) => {
     const words = key.replace(/([a-z])([A-Z])/g, '$1 $2');
     return words.charAt(0).toUpperCase() + words.slice(1);
@@ -118,6 +125,20 @@ export default function IntegrationsPage() {
           {snapshotStatus}
         </span>
       </div>
+
+      {demoPaused && (
+        <aside
+          role="status"
+          className="rounded-xl border border-amber-800/60 bg-amber-950/25 px-5 py-4 text-sm text-amber-100"
+        >
+          <h2 className="font-semibold">Demo account maintenance</h2>
+          <p className="mt-1 leading-6 text-amber-200/80">
+            The broker reported an abnormal balance on this demo account.
+            Automated demo trading is paused while the account is restored.
+            The live connection and historical records remain available below.
+          </p>
+        </aside>
+      )}
 
       <section className="rounded-2xl border border-slate-800/90 bg-linear-to-br from-[#141c27] to-[#10151d] p-5 shadow-xl shadow-black/10 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
