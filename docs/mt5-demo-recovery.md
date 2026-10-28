@@ -1,5 +1,15 @@
 # MT5 demo account recovery - 28 October 2026
 
+## Replacement account connected
+
+The dedicated MacroIntel terminal now uses MetaQuotes-Demo account 5058043912, a USD hedging demo with an initial balance of 100,000. The password is encrypted on the VM; it is not stored in source control. The former account and its historical records were not reset or overwritten.
+
+All five trading symbols passed the existing bid/ask, quote-age, candle, and independent buy/sell risk checks. Algo Trading was enabled only for the dedicated MacroIntel terminal, retaining its setting to disable trading when accounts change. The existing random trader resumed and opened three positions: EURUSD, USDCHF, and GBPJPY. Its 15-minute cadence, position cap, sizing, stops, targets, and five magic numbers were retained.
+
+During the terminal restart, MT5 updated to build 6292. Startup without explicit credentials then timed out. Initializing with the expected login, server, and password recovered the connection. The reader launcher now decrypts the VM credential and the Python reader authenticates explicitly on startup when that credential is available.
+
+Repeated live API requests returned advancing snapshots for the new account. Both deployed frontend origins received HTTP 200 with their matching CORS headers. The new account's history endpoint also returned HTTP 200 with an empty completed-position history, as expected for a fresh account. The temporary maintenance banner and paused-status conditions were removed from the Integrations page. The frontend production build, including TypeScript, passed; the changed Python and PowerShell files parsed successfully. No automated tests were added or run.
+
 ## Confirmed incident
 
 The broker ledger for MetaQuotes-Demo account 114054496 reconciles to USD -477,070.69. Twelve stop-out deals changed the balance from 99,990.97 by -577,061.66. The dominant deal is 10882295937, closing GBPJPY position 11134706010: 0.27 lots, buy at 210.039, exit at 209.804, recorded profit -576,818.18. Its original order had SL 209.619 and TP 210.669. The trader logged intended risk of approximately 71.85 at entry.
@@ -17,11 +27,11 @@ Recalculating those same prices during inspection returned approximately -40.22.
 - Preserved the deployed reader's 100-deal batches, background history uploads, retry handling, account identity checks, and signed requests in source control.
 - Added and built a maintenance state for the Integrations page. Both frontend deployments served the new maintenance/paused code after commit `0cdafe8`. Actual account balances and historical deals remain visible.
 
-## Remaining boundary
+## Boundary before the account replacement
 
-The broker balance is not corrected by these software changes. Recovery needs a broker-side ledger correction or a replacement demo account. A replacement also needs a saved login on the dedicated MacroIntel terminal and an updated `demo-account.json`.
+The former broker balance was not corrected by these software changes. Recovery required a broker-side ledger correction or a replacement demo account, with a saved login on the dedicated terminal and an updated `demo-account.json`.
 
-Quote inspection after reconnecting still showed stale/unavailable symbols and crossed EURUSD quotes. Trading must remain disabled until the account and quote stream are healthy; installing a newer Python package is not proof that the original feed fault is fixed. The risk checks reduce exposure to invalid inputs but cannot guarantee protection from a broker-side malfunction.
+Quote inspection before the replacement still showed stale/unavailable symbols and crossed EURUSD quotes, so trading remained disabled during that phase. Installing a newer Python package alone did not prove the feed fault was fixed. The risk checks reduce exposure to invalid inputs but cannot guarantee protection from a broker-side malfunction.
 
 ## Evidence and checks
 

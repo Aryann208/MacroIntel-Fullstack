@@ -297,9 +297,21 @@ def main() -> int:
         )
         return 1
 
-    connected = mt5.initialize(
-        str(args.terminal_path), timeout=10_000, portable=args.portable
-    )
+    password = os.environ.pop("MT5_DEMO_PASSWORD", None)
+    if password and args.expected_login and args.expected_server:
+        connected = mt5.initialize(
+            str(args.terminal_path),
+            login=int(args.expected_login),
+            password=password,
+            server=args.expected_server,
+            timeout=30_000,
+            portable=args.portable,
+        )
+    else:
+        connected = mt5.initialize(
+            str(args.terminal_path), timeout=10_000, portable=args.portable
+        )
+    password = None
     if not connected:
         print(f"Could not connect to the terminal: {mt5.last_error()}", file=sys.stderr)
         return 1
