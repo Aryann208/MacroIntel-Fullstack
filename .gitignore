@@ -10,6 +10,10 @@ coverage/
 *.log
 __pycache__/
 *.py[cod]
+.venv/
+connectors/mt5/demo-login.dpapi
+connectors/mt5/demo-account.json
+connectors/mt5/last_demo_cycle.txt
 next-env.d.ts
 source-material/*
 !source-material/account-metrics-and-performance-charts.md

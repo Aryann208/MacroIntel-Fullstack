@@ -12,8 +12,10 @@ Render free web services can sleep when idle, so the first request after a pause
 
 ## MT5 demo connector
 
-The MT5 reader runs on the GCP Windows VM against the already logged-in `C:\Program Files\FTMO Global Markets MT5 Terminal\terminal64.exe`, separate from the FundedNext trading terminal. It requires demo login `114054496` on `MetaQuotes-Demo`. The Render web and API services do not run MT5. The `MacroIntel-Demo-MT5-Reader` logon task runs the connector in `C:\bots\macrointel_reader` and points it at `https://macrointel-api.onrender.com/api/v1/integrations/mt5/snapshot`. The history endpoint follows the same API origin automatically. See [connector setup](../connectors/mt5/README.md).
+The MT5 reader runs on the replacement GCP VM `trading-prod-v2` against `C:\bots\macrointel_reader\terminal\terminal64.exe`, its dedicated portable terminal. The expected account is configured by `demo-account.json` in the connector folder, defaulting to login `114054496` on `MetaQuotes-Demo`. The Render web and API services do not run MT5. The `MacroIntel-Demo-MT5-Reader` task starts at Windows startup and retries every minute using the `botadmin` password logon, so RDP is not required. Its isolated Python environment is `C:\bots\macrointel_reader\.venv`. Uploads go to `https://macrointel-api.onrender.com/api/v1/integrations/mt5/snapshot`; history uses the same API origin. See [connector setup](../connectors/mt5/README.md).
 
-As of 14 October 2026, the deployed Render API still accepts unsigned snapshot requests; the HMAC middleware in this checkout has not been deployed. To enforce signatures, deploy that API change and configure its private `MT5_CONNECTOR_SECRET` to match the ignored `connectors/mt5/.env` file used by the GCP connector.
+The API's private `MT5_CONNECTOR_SECRET` must match the ignored connector `.env`. The reader signs snapshot and history uploads using HMAC-SHA256; credentials must not appear in frontend code or Git.
 
 The Integrations snapshot is held in API process memory and expires after three seconds. Keep the reader running for the demo; a stopped reader or sleeping/restarted API will show an unavailable snapshot until the next upload.
+
+On 28 October 2026 the demo account suffered an abnormal broker-booked loss. Its trader task is disabled. Both frontends now distinguish a negative-balance demo from a connection error and show a maintenance notice while preserving the actual broker figures. See [incident, repairs, and remaining recovery steps](mt5-demo-recovery.md).

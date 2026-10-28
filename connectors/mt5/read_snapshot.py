@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 
 POLL_INTERVAL_SECONDS = 1
 HISTORY_SYNC_INTERVAL_SECONDS = 60
+HISTORY_BATCH_SIZE = 100
 DEFAULT_API_URL = "http://127.0.0.1:4000/api/v1/integrations/mt5/snapshot"
 
 
@@ -132,7 +133,10 @@ def send_snapshot(api_url: str, snapshot: dict[str, Any], secret: str) -> None:
         with urlopen(request, timeout=5):
             pass
     except HTTPError as error:
-        raise SnapshotSendError(f"API returned HTTP {error.code}") from error
+        response_body = error.read().decode("utf-8", errors="replace")
+        raise SnapshotSendError(
+            f"API returned HTTP {error.code}: {response_body}"
+        ) from error
     except URLError as error:
         raise SnapshotSendError(f"API request failed: {error.reason}") from error
     except OSError as error:
@@ -200,26 +204,40 @@ def read_history(
 
 
 def send_history(api_url: str, history: dict[str, Any], secret: str) -> None:
-    body = json.dumps(history).encode("utf-8")
-    request = Request(
-        api_url,
-        data=body,
-        headers=signed_headers(body, secret),
-        method="POST",
-    )
+    deals = history["deals"]
+    # Keep each request below the API's default 100 KB JSON limit.
+    batches = [
+        deals[start : start + HISTORY_BATCH_SIZE]
+        for start in range(0, len(deals), HISTORY_BATCH_SIZE)
+    ]
+    if not batches:
+        batches = [[]]
 
-    try:
-        with urlopen(request, timeout=60):
-            pass
-    except HTTPError as error:
-        response_body = error.read().decode("utf-8", errors="replace")
-        raise HistorySendError(
-            f"API returned HTTP {error.code}: {response_body}"
-        ) from error
-    except URLError as error:
-        raise HistorySendError(f"API request failed: {error.reason}") from error
-    except OSError as error:
-        raise HistorySendError(f"API request failed: {error}") from error
+    for number, batch in enumerate(batches, start=1):
+        payload = {**history, "deals": batch}
+        body = json.dumps(payload).encode("utf-8")
+        request = Request(
+            api_url,
+            data=body,
+            headers=signed_headers(body, secret),
+            method="POST",
+        )
+
+        try:
+            with urlopen(request, timeout=60):
+                pass
+        except HTTPError as error:
+            response_body = error.read().decode("utf-8", errors="replace")
+            raise HistorySendError(
+                f"API returned HTTP {error.code}: {response_body}"
+            ) from error
+        except URLError as error:
+            raise HistorySendError(f"API request failed: {error.reason}") from error
+        except OSError as error:
+            raise HistorySendError(f"API request failed: {error}") from error
+
+        if len(batches) > 1:
+            print(f"History batch {number}/{len(batches)} uploaded", flush=True)
 
 
 def main() -> int:

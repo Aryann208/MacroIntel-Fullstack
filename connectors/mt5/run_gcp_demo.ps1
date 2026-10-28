@@ -1,16 +1,25 @@
 $ErrorActionPreference = 'Stop'
 
 $reader = 'C:\bots\macrointel_reader\read_snapshot.py'
-$terminal = 'C:\Program Files\FTMO Global Markets MT5 Terminal\terminal64.exe'
+$terminal = 'C:\bots\macrointel_reader\terminal\terminal64.exe'
 $log = 'C:\bots\macrointel_reader\reader.log'
+$accountPath = 'C:\bots\macrointel_reader\demo-account.json'
+$account = @{ login = '114054496'; server = 'MetaQuotes-Demo' }
+if (Test-Path -LiteralPath $accountPath) {
+    $account = Get-Content -LiteralPath $accountPath -Raw | ConvertFrom-Json
+}
 
-Add-Content $log "Reader starting $(Get-Date -Format o)"
-& 'C:\Python311\python.exe' $reader $terminal `
+Add-Content $log "Reader starting $(Get-Date -Format o)" -Encoding Unicode
+# Python logs retryable failures to stderr. PowerShell 5.1 must let it retry.
+$ErrorActionPreference = 'Continue'
+& 'C:\bots\macrointel_reader\.venv\Scripts\python.exe' -u $reader $terminal `
     --confirm-account `
-    --expected-login 114054496 `
-    --expected-server 'MetaQuotes-Demo' `
+    --portable `
+    --expected-login $account.login `
+    --expected-server $account.server `
     --api-url 'https://macrointel-api.onrender.com/api/v1/integrations/mt5/snapshot' `
     *>> $log
 $exitCode = $LASTEXITCODE
-Add-Content $log "Reader exited $(Get-Date -Format o) with code $exitCode"
+$ErrorActionPreference = 'Stop'
+Add-Content $log "Reader exited $(Get-Date -Format o) with code $exitCode" -Encoding Unicode
 exit $exitCode
